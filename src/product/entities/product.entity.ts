@@ -7,6 +7,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Price } from '../../price/entities/price.entity';
+import { Wishlist } from '../../wishlist/entities/wishlist.entity';
 
 export enum ProductCategory {
   VEGETABLE = 'vegetable', // 채소
@@ -55,6 +56,9 @@ export class Product {
 
   @OneToMany(() => Price, (price) => price.product)
   prices: Price[];
+
+  @OneToMany(() => Wishlist, (wishlist) => wishlist.product)
+  wishlists: Wishlist[];
 
   @CreateDateColumn()
   createdAt: Date;

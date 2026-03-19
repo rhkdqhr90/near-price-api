@@ -5,9 +5,14 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Price } from './entities/price.entity';
 import { Store } from '../store/entities/store.entity';
 import { Product } from '../product/entities/product.entity';
+import { User } from '../user/entities/user.entity';
+import { PriceReactionModule } from '../price-reaction/price-reaction.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Price, Store, Product])],
+  imports: [
+    TypeOrmModule.forFeature([Price, Store, Product, User]),
+    PriceReactionModule,
+  ],
   controllers: [PriceController],
   providers: [PriceService],
   exports: [TypeOrmModule],

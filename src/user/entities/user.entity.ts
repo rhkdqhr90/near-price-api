@@ -8,6 +8,12 @@ import {
 } from 'typeorm';
 import { UserOauth } from './user-oauth.entity';
 import { Price } from '../../price/entities/price.entity';
+import { Wishlist } from '../../wishlist/entities/wishlist.entity';
+
+export enum UserRole {
+  USER = 'user',
+  ADMIN = 'admin',
+}
 
 @Entity('users')
 export class User {
@@ -26,11 +32,11 @@ export class User {
     scale: 7,
     nullable: true,
     transformer: {
-      to: (v: number) => v,
-      from: (v: string) => parseFloat(v),
+      to: (v: number | null) => v,
+      from: (v: string | null) => (v === null ? null : parseFloat(v)),
     },
   })
-  latitude: number;
+  latitude: number | null;
 
   @Column({
     type: 'decimal',
@@ -38,11 +44,14 @@ export class User {
     scale: 7,
     nullable: true,
     transformer: {
-      to: (v: number) => v,
-      from: (v: string) => parseFloat(v),
+      to: (v: number | null) => v,
+      from: (v: string | null) => (v === null ? null : parseFloat(v)),
     },
   })
-  longitude: number;
+  longitude: number | null;
+
+  @Column({ type: 'enum', enum: UserRole, default: UserRole.USER })
+  role: UserRole;
 
   @Column({ type: 'int', default: 0 })
   trustScore: number;
@@ -52,6 +61,9 @@ export class User {
 
   @OneToMany(() => Price, (price) => price.user)
   prices: Price[];
+
+  @OneToMany(() => Wishlist, (wishlist) => wishlist.user)
+  wishlists: Wishlist[];
 
   @CreateDateColumn()
   createdAt: Date;

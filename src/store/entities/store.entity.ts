@@ -55,9 +55,9 @@ export class Store {
   @Column()
   address: string;
 
-  // 카카오 로컬 API 고유 ID (중복 등록 방지)
-  @Column({ unique: true })
-  kakaoPlaceId: string;
+  // 외부 API 매장 고유 ID (선택, 커스텀 매장은 null)
+  @Column({ type: 'varchar', unique: true, nullable: true })
+  externalPlaceId: string | null;
 
   @OneToMany(() => Price, (price) => price.store)
   prices: Price[];

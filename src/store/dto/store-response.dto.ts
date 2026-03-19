@@ -7,7 +7,7 @@ export class StoreResponseDto {
   latitude: number;
   longitude: number;
   address: string;
-  kakaoPlaceId: string;
+  externalPlaceId: string | null;
   createdAt: Date;
   updatedAt: Date;
 
@@ -19,7 +19,7 @@ export class StoreResponseDto {
     dto.latitude = store.latitude;
     dto.longitude = store.longitude;
     dto.address = store.address;
-    dto.kakaoPlaceId = store.kakaoPlaceId;
+    dto.externalPlaceId = store.externalPlaceId;
     dto.createdAt = store.createdAt;
     dto.updatedAt = store.updatedAt;
 

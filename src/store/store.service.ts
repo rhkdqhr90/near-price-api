@@ -5,6 +5,10 @@ import { Store } from './entities/store.entity';
 import { CreateStoreDto } from './dto/create-store.dto';
 import { StoreResponseDto } from './dto/store-response.dto';
 import { UpdateStoreDto } from './dto/update-store.dto';
+import {
+  NearbyStoreQueryDto,
+  NearbyStoreResponseDto,
+} from './dto/nearby-store.dto';
 
 @Injectable()
 export class StoreService {
@@ -22,6 +26,68 @@ export class StoreService {
   async findAll(): Promise<StoreResponseDto[]> {
     const stores = await this.storeRepository.find();
     return stores.map((store) => StoreResponseDto.from(store));
+  }
+
+  async findByExternalPlaceId(
+    externalPlaceId: string,
+  ): Promise<StoreResponseDto> {
+    const store = await this.storeRepository.findOne({
+      where: { externalPlaceId },
+    });
+    if (!store) {
+      throw new NotFoundException('존재하지 않는 매장입니다.');
+    }
+    return StoreResponseDto.from(store);
+  }
+
+  async findNearby(
+    query: NearbyStoreQueryDto,
+  ): Promise<NearbyStoreResponseDto[]> {
+    const { lat, lng, radius } = query;
+    const stores = await this.storeRepository
+      .createQueryBuilder('store')
+      .select([
+        'store.id',
+        'store.name',
+        'store.type',
+        'store.latitude',
+        'store.longitude',
+        'store.address',
+      ])
+      .addSelect(
+        `(6371000 * acos(
+          cos(radians(:lat)) * cos(radians(store.latitude)) *
+          cos(radians(store.longitude) - radians(:lng)) +
+          sin(radians(:lat)) * sin(radians(store.latitude))
+        ))`,
+        'distance',
+      )
+      .where(
+        `(6371000 * acos(
+          cos(radians(:lat)) * cos(radians(store.latitude)) *
+          cos(radians(store.longitude) - radians(:lng)) +
+          sin(radians(:lat)) * sin(radians(store.latitude))
+        )) <= :radius`,
+      )
+      .setParameters({ lat, lng, radius })
+      .orderBy('distance', 'ASC')
+      .getRawAndEntities();
+
+    return stores.raw
+      .map((row: { distance: string; store_id: string }) => {
+        const store = stores.entities.find((e) => e.id === row.store_id);
+        if (!store) return null;
+        const dto = new NearbyStoreResponseDto();
+        dto.id = store.id;
+        dto.name = store.name;
+        dto.type = store.type;
+        dto.latitude = store.latitude;
+        dto.longitude = store.longitude;
+        dto.address = store.address;
+        dto.distance = Math.round(parseFloat(row.distance));
+        return dto;
+      })
+      .filter((dto): dto is NearbyStoreResponseDto => dto !== null);
   }
 
   async findOne(id: string): Promise<StoreResponseDto> {

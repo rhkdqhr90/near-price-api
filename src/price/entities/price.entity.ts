@@ -36,8 +36,17 @@ export class Price {
   @Column({ type: 'int' })
   price: number;
 
-  @Column({ type: 'decimal', nullable: true })
-  quantity: number;
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 3,
+    nullable: true,
+    transformer: {
+      to: (v: number | null) => v,
+      from: (v: string | null) => (v === null ? null : parseFloat(v)),
+    },
+  })
+  quantity: number | null;
 
   // 사진 필수 (신뢰도의 핵심)
   @Column()
@@ -53,6 +62,9 @@ export class Price {
   // 제품 상태
   @Column({ nullable: true })
   condition: string;
+
+  @Column({ default: true })
+  isActive: boolean;
 
   // 좋아요 수
   @Column({ type: 'int', default: 0 })

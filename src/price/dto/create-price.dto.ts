@@ -1,11 +1,14 @@
 import { Type } from 'class-transformer';
 import {
+  IsDate,
   IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 
@@ -20,10 +23,12 @@ export class CreatePriceDto {
 
   @IsInt()
   @Min(0)
+  @Max(99_999_999)
   price: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   quantity?: number;
 
   @IsNotEmpty()
@@ -31,14 +36,17 @@ export class CreatePriceDto {
   imageUrl: string;
 
   @IsOptional()
+  @IsDate()
   @Type(() => Date)
-  saleStartDate?: string;
+  saleStartDate?: Date;
 
   @IsOptional()
+  @IsDate()
   @Type(() => Date)
-  saleEndDate?: string;
+  saleEndDate?: Date;
 
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   condition?: string;
 }

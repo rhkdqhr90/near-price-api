@@ -14,6 +14,7 @@ export class PriceResponseDto {
   saleStartDate: Date | null;
   saleEndDate: Date | null;
   condition: string | null;
+  isActive: boolean;
   likeCount: number;
   reportCount: number;
   createdAt: Date;
@@ -31,6 +32,7 @@ export class PriceResponseDto {
     dto.saleStartDate = price.saleStartDate;
     dto.saleEndDate = price.saleEndDate;
     dto.condition = price.condition;
+    dto.isActive = price.isActive;
     dto.likeCount = price.likeCount;
     dto.reportCount = price.reportCount;
     dto.createdAt = price.createdAt;

@@ -1,10 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Repository } from 'typeorm';
-import { User } from './entities/user.entity';
+import { User, UserRole } from './entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
+import type { AuthUser } from '../auth/types/auth-user.type';
 
 @Injectable()
 export class UserService {
@@ -20,7 +25,7 @@ export class UserService {
   }
 
   async findAll(): Promise<UserResponseDto[]> {
-    const users = await this.userRepository.find();
+    const users = await this.userRepository.find({ take: 100 });
     return users.map((user) => UserResponseDto.from(user));
   }
 
@@ -39,7 +44,11 @@ export class UserService {
   async update(
     id: string,
     updateUserDto: UpdateUserDto,
+    requestUser: AuthUser,
   ): Promise<UserResponseDto> {
+    if (requestUser.userId !== id && requestUser.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('수정 권한이 없습니다.');
+    }
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException(`User #${id} not found`);
