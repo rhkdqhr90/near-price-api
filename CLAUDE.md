@@ -41,14 +41,25 @@ npm run test:e2e           # E2E 테스트
 ```
 
 ## 현재 완료된 모듈
-- User CRUD + 카카오 OAuth
-- Store CRUD (카카오 로컬 API 연동)
-- Product CRUD
-- Price CRUD + "상품별 최저가 조회" API (curl 테스트 완료)
+- **User** CRUD + 카카오 OAuth + 관리자 로컬 로그인
+- **Store** CRUD (카카오 로컬 API 연동)
+- **Product** CRUD
+- **Price** CRUD + "상품별 최저가 조회" API (curl 테스트 완료)
+- **PriceReaction** (가격 신고/추천)
+- **PriceVerification** (가격 검증 시스템 - 맞아요/달라요) - NEW
+- **TrustScore** (사용자 신뢰도 점수 자동 계산) - NEW
+- **Badge** (신뢰도 기반 사용자 배지 부여) - NEW
+- **FAQ, Notice** (공지사항 관리)
 
 ## 참조 문서 (반드시 확인)
-- ENGINEERING_PRINCIPLES.md — 엔지니어링 원칙
-- ARCHITECTURE.md — 모든 기술 선택의 이유 문서화
+- README.md — 설치, 실행, API 구조
+- .claude/agents/ — Agent 역할 (db-architect, nestjs-reviewer, test-writer)
+- .claude/reviews/code-review-checklist.md — 코드 리뷰 체크리스트
+- .claude/skills/creating-nearprice-modules/ — 모듈 생성 규칙 및 패턴
+  - SKILL.md — 스킬 개요
+  - references/entity-patterns.md — Entity 템플릿
+  - references/dto-patterns.md — DTO 분리 규칙
+  - references/service-patterns.md — CRUD 패턴
 
 ---
 
@@ -119,20 +130,38 @@ CRITICAL / WARNING 이슈가 남아 있으면 완료 보고 불가.
 
 ## Step 3. 자체 검토 체크리스트
 
-nestjs-reviewer 통과 후 변경 파일 기준으로 직접 확인:
+nestjs-reviewer 통과 후 변경 파일 기준으로 **반드시** 이 항목들을 직접 확인:
 
+### 아키텍처 (3개)
 1. [ ] return await 있는가? (모든 async 함수)
 2. [ ] Entity 명시적 등록 (glob 패턴 금지)?
-3. [ ] decimal 컬럼에 transformer + parseFloat?
-4. [ ] DTO @Type(() => Date) + transform: true?
-5. [ ] ResponseDto 분리? (Entity 직접 반환 금지)
-6. [ ] findOne null 처리 → NotFoundException?
-7. [ ] 권한 체크 ForbiddenException?
-8. [ ] class-validator 데코레이터 전부 적용?
-9. [ ] 민감 정보 로깅 없는가?
-10. [ ] code-review-checklist.md 아키텍처/보안/성능 항목 확인했는가?
+3. [ ] ResponseDto 분리? (Entity 직접 반환 금지)
 
-하나라도 실패 시 수정 후 Step 1부터 재실행.
+### TypeORM (3개)
+4. [ ] decimal 컬럼에 transformer + parseFloat?
+5. [ ] DTO @Type(() => Date) 적용?
+6. [ ] findOne null 처리 → NotFoundException?
+
+### 입력 검증 (3개)
+7. [ ] class-validator 데코레이터 **전부** 적용? (@IsString, @IsUUID, @IsNumber 등)
+8. [ ] QueryBuilder 사용 시 파라미터 바인딩? (SQL injection 방지)
+9. [ ] 커스텀 검증 필요한 부분 @ValidatorConstraint 사용?
+
+### 보안 & 권한 (3개)
+10. [ ] 보호된 엔드포인트에 @UseGuards(JwtAuthGuard) 적용?
+11. [ ] 타인 리소스 접근 시 ForbiddenException 체크? (소유자 확인)
+12. [ ] 민감 정보 로깅 없는가? (토큰, 비밀번호, OAuth 시크릿)
+
+### 신뢰도 시스템 (NEW - 해당하는 경우만)
+13. [ ] PriceVerification: 본인 등록 가격 검증 방지?
+14. [ ] PriceVerification: 중복 검증 방지 (unique constraint)?
+15. [ ] TrustScore: 자동 계산 및 캐시 로직?
+16. [ ] Badge: 신뢰도 레벨 변경 시 업데이트?
+
+### 최종 확인
+17. [ ] .claude/reviews/code-review-checklist.md 전체 항목 확인했는가?
+
+**하나라도 실패 시 수정 후 Step 1부터 재실행.**
 
 ---
 

@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
@@ -23,7 +31,7 @@ export class PriceReactionController {
   @Post(':id/confirm')
   @UseGuards(JwtAuthGuard)
   async confirm(
-    @Param('id') priceId: string,
+    @Param('id', ParseUUIDPipe) priceId: string,
     @CurrentUser() user: AuthUser,
   ): Promise<void> {
     await this.priceReactionService.confirm(priceId, user.userId);
@@ -32,7 +40,7 @@ export class PriceReactionController {
   @Post(':id/report')
   @UseGuards(JwtAuthGuard)
   async report(
-    @Param('id') priceId: string,
+    @Param('id', ParseUUIDPipe) priceId: string,
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateReportDto,
   ): Promise<void> {
@@ -42,7 +50,7 @@ export class PriceReactionController {
   @Get(':id/reactions')
   @UseGuards(OptionalJwtAuthGuard)
   async getReactions(
-    @Param('id') priceId: string,
+    @Param('id', ParseUUIDPipe) priceId: string,
     @CurrentUserOptional() user: AuthUser | null,
   ): Promise<ReactionResponseDto> {
     return await this.priceReactionService.getReactions(

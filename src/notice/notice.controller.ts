@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UseGuards,
@@ -27,7 +28,9 @@ export class NoticeController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string): Promise<NoticeResponseDto> {
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<NoticeResponseDto> {
     return await this.noticeService.findOne(id);
   }
 
@@ -40,7 +43,7 @@ export class NoticeController {
   @Patch(':id')
   @UseGuards(JwtAuthGuard, AdminGuard)
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateNoticeDto,
   ): Promise<NoticeResponseDto> {
     return await this.noticeService.update(id, dto);
@@ -49,7 +52,7 @@ export class NoticeController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(JwtAuthGuard, AdminGuard)
-  async remove(@Param('id') id: string): Promise<void> {
+  async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.noticeService.remove(id);
   }
 }

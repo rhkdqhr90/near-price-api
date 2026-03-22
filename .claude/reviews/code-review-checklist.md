@@ -33,30 +33,168 @@
 
 ---
 
-## 4. 보안
+## 4. 보안 (OWASP Top 10 2025)
 
-- [ ] DTO에 `class-validator` 데코레이터 전부 적용? (`@IsString()`, `@IsUUID()` 등)
-- [ ] QueryBuilder 사용 시 파라미터 바인딩 사용? (SQL injection 방지)
-- [ ] 민감 정보 로깅 없는가? (토큰, 비밀번호, 개인정보)
-- [ ] 인증 필요 엔드포인트에 `@UseGuards(JwtAuthGuard)` 적용?
-- [ ] 관리자 전용 엔드포인트에 `AdminGuard` 적용?
+### 입력 검증 (A05: Injection)
+- [ ] DTO에 `class-validator` 데코레이터 **전부** 적용?
+  ```typescript
+  @IsString() @IsEmail() @IsUUID() @IsNumber() @IsInt() @IsOptional() 등
+  ```
+- [ ] QueryBuilder 사용 시 파라미터 바인딩 필수? (`:paramName` 방식)
+  ```typescript
+  // ✅ 안전
+  .where('price.id = :id', { id: priceId })
+  // ❌ 위험
+  .where(`price.id = '${priceId}'`)
+  ```
+- [ ] 사용자 입력값을 raw query에 직접 삽입하지 않는가?
+- [ ] 문자열 길이 제한? (@Length, @MaxLength)
+- [ ] 이메일/URL/숫자 형식 검증?
+
+### 민감 정보 보호 (A01: Broken Access Control + Data Exposure)
+- [ ] 민감 정보 로깅 없는가? (토큰, 비밀번호, OAuth 시크릿, 개인정보)
+  ```typescript
+  // ❌ 금지
+  console.log('User token:', jwt_token);
+  logger.info(`OAuth secret: ${secret}`);
+  ```
+- [ ] ResponseDto에서 민감 필드 제외? (password, oauth_secret)
+- [ ] 에러 응답에서 상세 정보 노출 금지? (DB 구조 노출 방지)
+
+### 인증 & 권한 (A01: Broken Access Control)
+- [ ] 보호된 엔드포인트에 `@UseGuards(JwtAuthGuard)` 적용?
+  ```typescript
+  @Post()
+  @UseGuards(JwtAuthGuard)
+  create(@Body() dto: CreatePriceDto, @Request() req) { ... }
+  ```
+- [ ] 관리자 전용에 `@UseGuards(AdminGuard)` 또는 `@Roles(UserRole.ADMIN)` 적용?
+- [ ] 타인 리소스 수정/삭제 시 소유자 확인? (ForbiddenException)
+  ```typescript
+  if (price.userId !== requestUserId) {
+    throw new ForbiddenException('수정 권한이 없습니다');
+  }
+  ```
+- [ ] JWT 토큰 검증 구현? (만료, 서명 검증)
+- [ ] refresh token 보안? (httpOnly, secure flags)
+
+### 데이터 무결성
+- [ ] 중요 데이터 변경 로깅? (감사 추적)
+- [ ] 동시성 제어? (낙관적/비관적 락)
+- [ ] 트랜잭션 처리? (여러 테이블 수정 시)
+
+### HTTPS & 통신 보안
+- [ ] 프로덕션에서 HTTPS 필수
+- [ ] CORS 정책 명시? (`origins`, `credentials`)
+- [ ] 헤더 보안? (X-Frame-Options, X-Content-Type-Options, CSP)
 
 ---
 
-## 5. TypeORM / 성능
+## 5. TypeORM / 성능 최적화
 
-- [ ] decimal 컬럼에 `transformer: { from: (v) => parseFloat(v) }` 적용?
-- [ ] N+1 쿼리 없는가? (필요한 `relations`만 명시하거나 QueryBuilder join 사용)
-- [ ] 불필요한 relations를 과도하게 로드하지 않는가?
-- [ ] 대량 조회 시 `take` / 페이지네이션 적용?
+### Decimal 컬럼 (좌표, 가격)
+- [ ] transformer 정확하게 적용?
+  ```typescript
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 7,
+    transformer: {
+      from: (v: string | null) => v !== null ? parseFloat(v) : null,
+      to: (v: number | null) => v,
+    },
+  })
+  latitude: number;
+  ```
+- [ ] nullable decimal 처리? (null 체크)
+- [ ] 정밀도 맞는가? (좌표: 7자리, 가격: 2자리)
+
+### 쿼리 최적화 (N+1 방지)
+- [ ] N+1 쿼리 없는가? (필요한 `relations` 명시)
+  ```typescript
+  // ✅ 올바름 (1 쿼리)
+  await priceRepository.find({
+    relations: ['store', 'product', 'user'],
+  });
+
+  // ❌ N+1 (1 + N 쿼리)
+  const prices = await priceRepository.find();
+  prices.forEach(p => console.log(p.store.name)); // 각각 쿼리 발생
+  ```
+- [ ] QueryBuilder 사용 시 `leftJoinAndSelect` 최적화?
+  ```typescript
+  createQueryBuilder('price')
+    .leftJoinAndSelect('price.store', 'store')
+    .leftJoinAndSelect('price.product', 'product')
+    .where('price.createdAt > :date', { date: yesterday })
+  ```
+- [ ] 불필요한 relations 로드 금지? (성능 저하)
+- [ ] Eager loading 사용하지 않음? (TypeORM 추천)
+
+### 대량 데이터 처리
+- [ ] 대량 조회 시 pagination (`take`, `skip`) 적용?
+  ```typescript
+  take: 20,
+  skip: 0,
+  order: { createdAt: 'DESC' },
+  ```
+- [ ] 대량 insert 시 `createQueryBuilder` + `insert`?
+- [ ] 배치 처리 고려? (1000개 이상)
+
+### 인덱스 전략
+- [ ] Foreign Key 컬럼 인덱싱? (자주 조회/조인되는 FK)
+- [ ] 정렬/필터링 컬럼 인덱싱? (created_at, updated_at)
+- [ ] 복합 인덱스 고려? (FK + status 등)
+- [ ] 위치 기반 검색용 좌표 인덱스? (GiST index)
 
 ---
 
-## 6. DTO 규칙
+## 6. DTO 규칙 & 검증
 
-- [ ] 날짜 필드 DTO에 `@Type(() => Date)` + `ValidationPipe transform: true`?
-- [ ] `UpdateDto`는 `PartialType(CreateDto)` 상속 사용?
-- [ ] `trustScore`: int로 처리, UI 표현 로직은 프론트에 위임?
+### 3종 DTO 분리
+- [ ] CreateDto, UpdateDto, ResponseDto 3개 분리?
+- [ ] Entity를 직접 반환하지 않고 ResponseDto 사용?
+  ```typescript
+  // ✅ 올바름
+  return ResponseDto.from(entity);
+
+  // ❌ 금지
+  return entity; // Entity 직접 반환
+  ```
+
+### 날짜 필드 처리
+- [ ] DTO의 날짜 필드에 `@Type(() => Date)` 적용?
+  ```typescript
+  @Type(() => Date)
+  @IsDate()
+  saleEndDate: Date;
+  ```
+- [ ] ValidationPipe에 `transform: true` 설정?
+  ```typescript
+  // main.ts
+  app.useGlobalPipes(new ValidationPipe({ transform: true }));
+  ```
+
+### 선택 필드 처리
+- [ ] UpdateDto에서 `PartialType(CreateDto)` 사용?
+  ```typescript
+  export class UpdatePriceDto extends PartialType(CreatePriceDto) {}
+  ```
+- [ ] @IsOptional() 올바르게 사용? (선택 필드만)
+- [ ] FK 변경 방지 필요시 CreateDto에만 포함?
+
+### 신뢰도 시스템 필드 (NEW)
+- [ ] trustScore: int (0~100) 처리?
+- [ ] verificationResult: ENUM (MATCH / DIFFERENT)?
+- [ ] badgeLevel: ENUM (BRONZE / SILVER / GOLD / PLATINUM)?
+- [ ] UI 표현 로직은 ResponseDto에서만 노출?
+  ```typescript
+  // ResponseDto에서만
+  get trustScoreLabel(): string {
+    if (this.trustScore >= 80) return 'GOLD';
+    // ...
+  }
+  ```
 
 ---
 

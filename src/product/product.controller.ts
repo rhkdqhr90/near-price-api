@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -58,14 +59,14 @@ export class ProductController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string): Promise<ProductResponseDto> {
+  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<ProductResponseDto> {
     return await this.productService.findOne(id);
   }
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard, AdminGuard)
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() updateProductDto: UpdateProductDto,
   ): Promise<ProductResponseDto> {
     return await this.productService.update(id, updateProductDto);
@@ -73,7 +74,7 @@ export class ProductController {
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, AdminGuard)
-  async remove(@Param('id') id: string): Promise<void> {
+  async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.productService.remove(id);
   }
 }

@@ -20,6 +20,8 @@ interface KakaoUserInfo {
     email?: string;
     profile?: {
       nickname?: string;
+      thumbnail_image_url?: string;
+      profile_image_url?: string;
     };
   };
 }
@@ -128,6 +130,15 @@ export class AuthService {
     });
 
     if (existing) {
+      // 기존 유저: 카카오 프로필 사진 업데이트 (변경됐을 수 있으므로)
+      const newProfileImage =
+        kakaoUser.kakao_account?.profile?.profile_image_url ??
+        kakaoUser.kakao_account?.profile?.thumbnail_image_url ??
+        null;
+      if (newProfileImage && existing.user.profileImageUrl !== newProfileImage) {
+        await this.userRepository.update(existing.user.id, { profileImageUrl: newProfileImage });
+        existing.user.profileImageUrl = newProfileImage;
+      }
       return existing.user;
     }
 
@@ -135,9 +146,13 @@ export class AuthService {
       kakaoUser.kakao_account?.email ?? `kakao_${providerId}@nearprice.app`;
     const nickname =
       kakaoUser.kakao_account?.profile?.nickname ?? `사용자_${providerId}`;
+    const profileImageUrl =
+      kakaoUser.kakao_account?.profile?.profile_image_url ??
+      kakaoUser.kakao_account?.profile?.thumbnail_image_url ??
+      null;
 
     return await this.dataSource.transaction(async (em) => {
-      const user = em.create(User, { email, nickname });
+      const user = em.create(User, { email, nickname, profileImageUrl });
       const savedUser = await em.save(user);
 
       const oauth = em.create(UserOauth, {

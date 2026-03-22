@@ -4,9 +4,12 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
@@ -43,9 +46,21 @@ export class PriceController {
 
   @Get('product/:productId')
   async findByProduct(
-    @Param('productId') productId: string,
+    @Param('productId', ParseUUIDPipe) productId: string,
   ): Promise<PriceResponseDto[]> {
     return await this.priceService.findByProduct(productId);
+  }
+
+  @Get('by-name')
+  async findByProductName(
+    @Query('name') name: string,
+  ): Promise<PriceResponseDto[]> {
+    if (!name || name.trim().length === 0) return [];
+    // 검색어 길이 제한 (DOS 방지)
+    if (name.length > 100) {
+      throw new BadRequestException('검색어는 100자 이하여야 합니다.');
+    }
+    return await this.priceService.findByProductName(name);
   }
 
   @Get()
@@ -54,14 +69,16 @@ export class PriceController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string): Promise<PriceResponseDto> {
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<PriceResponseDto> {
     return await this.priceService.findOne(id);
   }
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() updatePriceDto: UpdatePriceDto,
     @CurrentUser() user: AuthUser,
   ): Promise<PriceResponseDto> {
@@ -70,14 +87,14 @@ export class PriceController {
 
   @Patch(':id/deactivate')
   @UseGuards(JwtAuthGuard, AdminGuard)
-  async deactivate(@Param('id') id: string): Promise<void> {
+  async deactivate(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.priceService.deactivate(id);
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
   async remove(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: AuthUser,
   ): Promise<void> {
     await this.priceService.remove(id, user.userId);

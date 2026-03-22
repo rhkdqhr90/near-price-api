@@ -69,8 +69,108 @@ export class <n>ResponseDto {
 }
 ```
 
+## 검증 데코레이터 전체 목록
+
+```typescript
+import { IsString, IsNumber, IsEmail, IsUUID, IsDate, IsInt,
+         IsEnum, IsBoolean, IsOptional, IsArray, IsPositive,
+         MinLength, MaxLength, Min, Max, Matches } from 'class-validator';
+
+// 문자열
+@IsString() name: string;
+@Email() email: string;
+@Length(2, 50) username: string;
+@MaxLength(500) description: string;
+
+// 숫자
+@IsNumber() latitude: number;
+@IsInt() quantity: number;
+@IsPositive() price: number; // > 0
+
+// UUID
+@IsUUID() storeId: string;
+
+// 날짜
+@Type(() => Date)
+@IsDate() saleEndDate: Date;
+
+// Enum
+@IsEnum(VerificationResult) result: VerificationResult;
+
+// 선택 필드
+@IsOptional() comment?: string;
+
+// 배열
+@IsArray() @IsUUID('all', { each: true }) productIds: string[];
+```
+
+## 신뢰도 시스템 DTO 예제 (NEW)
+
+### CreateVerificationDto
+```typescript
+export class CreateVerificationDto {
+  @IsEnum(VerificationResult)
+  result: VerificationResult; // MATCH | DIFFERENT
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  comment?: string;
+}
+```
+
+### VerificationResponseDto
+```typescript
+export class VerificationResponseDto {
+  id: string;
+  priceId: string;
+  userId: string;
+  result: VerificationResult;
+  comment?: string;
+  createdAt: Date;
+
+  static from(entity: PriceVerification): VerificationResponseDto {
+    const dto = new VerificationResponseDto();
+    dto.id = entity.id;
+    dto.priceId = entity.priceId;
+    dto.userId = entity.userId;
+    dto.result = entity.result;
+    dto.comment = entity.comment;
+    dto.createdAt = entity.createdAt;
+    return dto;
+  }
+}
+```
+
+### TrustScoreResponseDto
+```typescript
+export class TrustScoreResponseDto {
+  userId: string;
+  trustScore: number; // 0~100
+  level: BadgeLevel; // BRONZE | SILVER | GOLD | PLATINUM
+  totalVerifications: number;
+  matchVerifications: number;
+  matchRatio: number; // 0~100
+
+  static from(entity: TrustScore): TrustScoreResponseDto {
+    const dto = new TrustScoreResponseDto();
+    dto.userId = entity.userId;
+    dto.trustScore = entity.trustScore;
+    dto.level = entity.level;
+    dto.totalVerifications = entity.totalVerifications;
+    dto.matchVerifications = entity.matchVerifications;
+    dto.matchRatio = entity.totalVerifications > 0
+      ? (entity.matchVerifications / entity.totalVerifications) * 100
+      : 0;
+    return dto;
+  }
+}
+```
+
 ## 금지사항
 
 - 날짜 타입을 string으로 선언 금지 → Date + @Type(() => Date)
-- Entity 직접 반환 금지
+- Entity 직접 반환 금지 → ResponseDto 필수
 - DTO에 비즈니스 로직 금지 (from() 정적 메서드는 허용)
+- Validation 데코레이터 누락 금지 → 모든 필드에 적용
+- pk나 timestamps를 CreateDto에 포함 금지

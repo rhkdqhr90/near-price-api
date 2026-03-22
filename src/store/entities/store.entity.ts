@@ -16,6 +16,9 @@ export enum StoreType {
   TRADITIONAL_MARKET = 'traditional_market', // 전통시장
 }
 
+// 커스텀 카테고리도 지원하는 타입
+export type StoreTypeValue = StoreType | string;
+
 @Entity('stores')
 export class Store {
   @PrimaryGeneratedColumn('uuid')
@@ -25,18 +28,17 @@ export class Store {
   name: string;
 
   @Column({
-    type: 'enum',
-    enum: StoreType,
+    type: 'varchar', // enum 대신 varchar로 변경하여 커스텀 카테고리 지원
   })
-  type: StoreType;
+  type: string;
 
   @Column({
     type: 'decimal',
     precision: 10,
     scale: 7,
     transformer: {
-      to: (v: number) => v,
-      from: (v: string) => parseFloat(v),
+      to: (v: number | null) => v,
+      from: (v: string | null) => (v === null ? null : parseFloat(v)),
     },
   })
   latitude: number;
@@ -46,8 +48,8 @@ export class Store {
     precision: 10,
     scale: 7,
     transformer: {
-      to: (v: number) => v,
-      from: (v: string) => parseFloat(v),
+      to: (v: number | null) => v,
+      from: (v: string | null) => (v === null ? null : parseFloat(v)),
     },
   })
   longitude: number;

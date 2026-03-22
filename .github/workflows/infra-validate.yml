@@ -1,0 +1,88 @@
+name: 인프라 검증 (Terraform)
+
+on:
+  pull_request:
+    paths:
+      - 'infra/terraform/**'
+      - '.github/workflows/infra-validate.yml'
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'infra/terraform/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Terraform 설정
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ~> 1.0
+
+      - name: Terraform 초기화
+        working-directory: ./infra/terraform
+        run: terraform init -backend=false
+
+      - name: Terraform 검증
+        working-directory: ./infra/terraform
+        run: terraform validate
+
+      - name: Terraform 포맷 확인
+        working-directory: ./infra/terraform
+        run: terraform fmt -check -recursive
+
+      - name: Terraform 보안 검사 (tfsec)
+        uses: aquasecurity/tfsec-action@v1
+        with:
+          working_directory: ./infra/terraform
+          args: --minimum-severity MEDIUM
+
+      - name: Terraform 계획 생성 (dry-run)
+        working-directory: ./infra/terraform
+        run: |
+          terraform plan \
+            -var-file=terraform.tfvars.example \
+            -out=tfplan \
+            -no-color
+        continue-on-error: true
+
+      - name: Terraform 계획 결과 출력
+        working-directory: ./infra/terraform
+        run: |
+          if [ -f "tfplan" ]; then
+            terraform show tfplan
+          fi
+        continue-on-error: true
+
+      - name: 결과 요약
+        run: |
+          echo "## Terraform 검증 완료" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Terraform 초기화" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Terraform 검증" >> $GITHUB_STEP_SUMMARY
+          echo "✅ 포맷 확인" >> $GITHUB_STEP_SUMMARY
+          echo "✅ 보안 검사" >> $GITHUB_STEP_SUMMARY
+
+  comment:
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: PR 코멘트 작성
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '## Terraform 검증 완료\n\n✅ 모든 검증 통과\n- Terraform 구문 검증\n- 포맷 확인\n- 보안 검사 (tfsec)'
+            })

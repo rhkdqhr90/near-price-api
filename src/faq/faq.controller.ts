@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UseGuards,
@@ -27,7 +28,9 @@ export class FaqController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string): Promise<FaqResponseDto> {
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<FaqResponseDto> {
     return await this.faqService.findOne(id);
   }
 
@@ -40,7 +43,7 @@ export class FaqController {
   @Patch(':id')
   @UseGuards(JwtAuthGuard, AdminGuard)
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateFaqDto,
   ): Promise<FaqResponseDto> {
     return await this.faqService.update(id, dto);
@@ -49,7 +52,7 @@ export class FaqController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(JwtAuthGuard, AdminGuard)
-  async remove(@Param('id') id: string): Promise<void> {
+  async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.faqService.remove(id);
   }
 }

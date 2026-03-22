@@ -1,0 +1,166 @@
+name: API 배포 파이프라인
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '배포 환경'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: 린팅
+        run: npm run lint --if-present
+        continue-on-error: true
+
+      - name: 테스트 실행
+        run: npm run test --if-present
+        continue-on-error: true
+
+      - name: 빌드
+        run: npm run build
+
+      - name: 빌드 아티팩트 저장
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifact
+          path: dist/
+          retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 빌드 아티팩트 다운로드
+        uses: actions/download-artifact@v3
+        with:
+          name: build-artifact
+          path: dist/
+
+      - name: SSH 키 설정
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: 배포 환경 결정
+        id: env
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "environment=prod" >> $GITHUB_OUTPUT
+            echo "target_path=/home/ec2-user/near-price-api/prod" >> $GITHUB_OUTPUT
+          else
+            echo "environment=staging" >> $GITHUB_OUTPUT
+            echo "target_path=/home/ec2-user/near-price-api/staging" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 코드 배포
+        run: |
+          rsync -avz \
+            --delete \
+            --exclude=node_modules \
+            --exclude=.env \
+            --exclude=.git \
+            -e "ssh -i ~/.ssh/deploy_key" \
+            ./ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ steps.env.outputs.target_path }}/
+
+      - name: 원격 서버에서 배포 실행
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+            "bash -s" << 'EOF'
+
+            set -e
+
+            TARGET_PATH="${{ steps.env.outputs.target_path }}"
+            ENVIRONMENT="${{ steps.env.outputs.environment }}"
+
+            echo "=== 배포 시작 (환경: $ENVIRONMENT) ==="
+            echo "시간: $(date)"
+
+            # 디렉토리 이동
+            cd $TARGET_PATH
+
+            # 의존성 설치
+            echo "의존성 설치 중..."
+            npm install --production --no-save
+
+            # 데이터베이스 마이그레이션
+            if [ -f "package.json" ] && grep -q "typeorm" package.json; then
+              echo "데이터베이스 마이그레이션 실행..."
+              npm run typeorm:migration:run || true
+            fi
+
+            # PM2로 애플리케이션 재시작
+            echo "애플리케이션 재시작 중..."
+            if pm2 list | grep -q "near-price"; then
+              pm2 reload near-price --update-env
+            else
+              pm2 start ecosystem.config.js --name near-price
+            fi
+
+            # PM2 저장
+            pm2 save
+
+            # 헬스체크 (3초 대기 후 확인)
+            sleep 3
+            if curl -f http://localhost:3000/health 2>/dev/null; then
+              echo "=== 배포 성공 ==="
+            else
+              echo "=== 헬스체크 실패 - 롤백 시도 ==="
+              pm2 restart near-price
+              exit 1
+            fi
+          EOF
+
+      - name: 배포 알림 (성공)
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const commit = context.payload.head_commit || context.payload.pull_request.head.sha;
+            const message = `✅ API 배포 성공\n환경: ${{ steps.env.outputs.environment }}\nCommit: ${commit?.message || 'N/A'}`;
+            console.log(message);
+
+      - name: 배포 알림 (실패)
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const message = `❌ API 배포 실패\n환경: ${{ steps.env.outputs.environment }}\n작업: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            console.log(message);

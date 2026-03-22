@@ -74,6 +74,31 @@ export class Price {
   @Column({ type: 'int', default: 0 })
   reportCount: number;
 
+  // 신뢰도 점수 시스템
+  @Column({
+    type: 'decimal',
+    precision: 5,
+    scale: 2,
+    nullable: true,
+    transformer: {
+      to: (v: number | null) => v,
+      from: (v: string | null) => (v === null ? null : parseFloat(v)),
+    },
+  })
+  trustScore: number | null;
+
+  @Column({ type: 'int', default: 0 })
+  verificationCount: number;
+
+  @Column({ type: 'int', default: 0 })
+  confirmedCount: number;
+
+  @Column({ type: 'int', default: 0 })
+  disputedCount: number;
+
+  @Column({ type: 'uuid', nullable: true })
+  sourceVerificationId: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

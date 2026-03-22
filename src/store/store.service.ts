@@ -73,9 +73,12 @@ export class StoreService {
       .orderBy('distance', 'ASC')
       .getRawAndEntities();
 
+    // Create a map for O(1) lookup instead of O(n) find
+    const storeMap = new Map(stores.entities.map((s) => [s.id, s]));
+
     return stores.raw
       .map((row: { distance: string; store_id: string }) => {
-        const store = stores.entities.find((e) => e.id === row.store_id);
+        const store = storeMap.get(row.store_id);
         if (!store) return null;
         const dto = new NearbyStoreResponseDto();
         dto.id = store.id;

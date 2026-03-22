@@ -76,7 +76,7 @@ export class PriceService {
 
   async findAll(): Promise<PriceResponseDto[]> {
     const prices = await this.priceRepository.find({
-      relations: ['store', 'product'],
+      relations: ['store', 'product', 'user'],
       take: 100,
     });
     return prices.map((price) => PriceResponseDto.from(price));
@@ -85,7 +85,7 @@ export class PriceService {
   async findOne(id: string): Promise<PriceResponseDto> {
     const price = await this.priceRepository.findOne({
       where: { id },
-      relations: ['store', 'product'],
+      relations: ['store', 'product', 'user'],
     });
     if (!price) {
       throw new NotFoundException('가격 정보가 없습니다');
@@ -105,9 +105,23 @@ export class PriceService {
   async findByProduct(productId: string): Promise<PriceResponseDto[]> {
     const prices = await this.priceRepository.find({
       where: { product: { id: productId }, isActive: true },
-      relations: ['store', 'product'],
+      relations: ['store', 'product', 'user'],
       order: { price: 'ASC' },
     });
+    return prices.map((price) => PriceResponseDto.from(price));
+  }
+
+  async findByProductName(productName: string): Promise<PriceResponseDto[]> {
+    const trimmed = productName.trim();
+    const prices = await this.priceRepository
+      .createQueryBuilder('price')
+      .leftJoinAndSelect('price.store', 'store')
+      .leftJoinAndSelect('price.product', 'product')
+      .leftJoinAndSelect('price.user', 'user')
+      .where('LOWER(TRIM(product.name)) = LOWER(:name)', { name: trimmed })
+      .andWhere('price.isActive = :isActive', { isActive: true })
+      .orderBy('price.price', 'ASC')
+      .getMany();
     return prices.map((price) => PriceResponseDto.from(price));
   }
 

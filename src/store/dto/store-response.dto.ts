@@ -1,9 +1,9 @@
-import { Store, StoreType } from '../entities/store.entity';
+import { Store } from '../entities/store.entity';
 
 export class StoreResponseDto {
   id: string;
   name: string;
-  type: StoreType;
+  type: string;
   latitude: number;
   longitude: number;
   address: string;

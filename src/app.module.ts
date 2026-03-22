@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { UserModule } from './user/user.module';
 import { StoreModule } from './store/store.module';
 import { ProductModule } from './product/product.module';
@@ -20,12 +22,32 @@ import { FaqModule } from './faq/faq.module';
 import { Faq } from './faq/entities/faq.entity';
 import { PriceReactionModule } from './price-reaction/price-reaction.module';
 import { PriceReaction } from './price-reaction/entities/price-reaction.entity';
+import { PriceVerificationModule } from './price-verification/price-verification.module';
+import { PriceVerification } from './price-verification/entities/price-verification.entity';
+import { TrustScoreModule } from './trust-score/trust-score.module';
+import { UserTrustScore } from './trust-score/entities/user-trust-score.entity';
+import { BadgeModule } from './badge/badge.module';
+import { BadgeDefinition } from './badge/entities/badge-definition.entity';
+import { UserBadge } from './badge/entities/user-badge.entity';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: 60000, // 1분
+        limit: 100, // 기본: 1분에 100요청
+      },
+      {
+        name: 'auth',
+        ttl: 60000, // 1분
+        limit: 10, // 인증: 1분에 10요청
+      },
+    ]),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
@@ -45,6 +67,10 @@ import { PriceReaction } from './price-reaction/entities/price-reaction.entity';
           Notice,
           Faq,
           PriceReaction,
+          PriceVerification,
+          UserTrustScore,
+          BadgeDefinition,
+          UserBadge,
         ],
         synchronize: configService.get('NODE_ENV') !== 'production',
       }),
@@ -60,6 +86,16 @@ import { PriceReaction } from './price-reaction/entities/price-reaction.entity';
     NoticeModule,
     FaqModule,
     PriceReactionModule,
+    PriceVerificationModule,
+    TrustScoreModule,
+    BadgeModule,
+    HealthModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

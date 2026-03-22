@@ -1,0 +1,42 @@
+# terraform.tfvars.example
+# 사용법: 이 파일을 복사하여 terraform.tfvars를 생성하고 값을 수정하세요.
+# cp terraform.tfvars.example terraform.tfvars
+
+aws_region       = "ap-northeast-2"
+project_name     = "near-price"
+environment      = "prod"
+
+# VPC 설정
+vpc_cidr              = "10.0.0.0/16"
+public_subnet_cidrs   = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs  = ["10.0.11.0/24", "10.0.12.0/24"]
+
+# EC2 설정
+instance_type        = "t3.small"
+key_pair_name        = "near-price-key"  # 사전에 AWS에서 생성된 키 페어 이름
+ec2_instance_count   = 1                 # MVP: 1개, 프로덕션: 2개
+enable_monitoring    = false             # CloudWatch 상세 모니터링 (비용 발생)
+
+# RDS 설정
+db_allocated_storage      = 20
+db_instance_class         = "db.t3.micro"    # 프리 티어
+db_engine_version         = "16.1"
+db_name                   = "nearprice"
+db_username               = "admin"
+db_password               = "ChangeMe!12345"  # 필수: 8자 이상, 특수문자 포함
+db_backup_retention_days  = 7
+db_backup_window          = "02:00-03:00"    # 한국시간 (UTC+9): 오전 11:00-12:00
+db_maintenance_window     = "sun:03:00-sun:04:00"  # 한국시간: 일요일 정오-1시
+db_multi_az               = false            # MVP: false, 프로덕션: true
+
+# 보안 설정
+allowed_ssh_cidrs   = ["YOUR_OFFICE_IP/32", "YOUR_HOME_IP/32"]  # 관리자 IP로 변경 필수
+allowed_http_cidrs  = ["0.0.0.0/0"]
+allowed_https_cidrs = ["0.0.0.0/0"]
+
+# 태그
+tags = {
+  Owner   = "DevOps Team"
+  Slack   = "@devops"
+  Contact = "devops@company.com"
+}

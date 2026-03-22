@@ -23,7 +23,7 @@ export class User {
   @Column({ unique: true })
   email: string;
 
-  @Column()
+  @Column({ unique: true })
   nickname: string;
 
   @Column({
@@ -52,6 +52,12 @@ export class User {
 
   @Column({ type: 'enum', enum: UserRole, default: UserRole.USER })
   role: UserRole;
+
+  @Column({ nullable: true })
+  profileImageUrl: string | null;
+
+  @Column({ nullable: true })
+  fcmToken: string | null;
 
   @Column({ type: 'int', default: 0 })
   trustScore: number;

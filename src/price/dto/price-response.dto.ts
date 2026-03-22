@@ -17,6 +17,10 @@ export class PriceResponseDto {
   isActive: boolean;
   likeCount: number;
   reportCount: number;
+  trustScore: number | null;
+  verificationCount: number;
+  confirmedCount: number;
+  disputedCount: number;
   createdAt: Date;
   updatedAt: Date;
 
@@ -35,6 +39,10 @@ export class PriceResponseDto {
     dto.isActive = price.isActive;
     dto.likeCount = price.likeCount;
     dto.reportCount = price.reportCount;
+    dto.trustScore = price.trustScore;
+    dto.verificationCount = price.verificationCount;
+    dto.confirmedCount = price.confirmedCount;
+    dto.disputedCount = price.disputedCount;
     dto.createdAt = price.createdAt;
     dto.updatedAt = price.updatedAt;
     return dto;

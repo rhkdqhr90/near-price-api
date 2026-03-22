@@ -27,6 +27,8 @@ describe('AuthService', () => {
     id: 'user-uuid-1234',
     email: 'test@example.com',
     nickname: '테스트유저',
+    profileImageUrl: null,
+    fcmToken: null,
     latitude: null as unknown as number,
     longitude: null as unknown as number,
     role: UserRole.USER,

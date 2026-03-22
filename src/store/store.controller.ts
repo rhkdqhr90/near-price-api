@@ -4,10 +4,12 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
@@ -37,19 +39,25 @@ export class StoreController {
   }
 
   @Get('by-external/:externalPlaceId')
-  async findByExternal(@Param('externalPlaceId') externalPlaceId: string) {
+  async findByExternal(
+    @Param('externalPlaceId') externalPlaceId: string,
+  ) {
+    // externalPlaceId 길이 검증 (SQL Injection 방지)
+    if (!externalPlaceId || externalPlaceId.length > 200) {
+      throw new BadRequestException('Invalid externalPlaceId format');
+    }
     return await this.storeService.findByExternalPlaceId(externalPlaceId);
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return await this.storeService.findOne(id);
   }
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard, AdminGuard)
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() updateStoreDto: UpdateStoreDto,
   ) {
     return await this.storeService.update(id, updateStoreDto);
@@ -57,7 +65,7 @@ export class StoreController {
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, AdminGuard)
-  async remove(@Param('id') id: string) {
+  async remove(@Param('id', ParseUUIDPipe) id: string) {
     return await this.storeService.remove(id);
   }
 }

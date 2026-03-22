@@ -1,6 +1,5 @@
 import { IsNumber, IsOptional, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
-import { StoreType } from '../entities/store.entity';
 
 export class NearbyStoreQueryDto {
   @Type(() => Number)
@@ -26,7 +25,7 @@ export class NearbyStoreQueryDto {
 export class NearbyStoreResponseDto {
   id: string;
   name: string;
-  type: StoreType;
+  type: string; // 기본 또는 커스텀 카테고리 모두 지원
   latitude: number;
   longitude: number;
   address: string;

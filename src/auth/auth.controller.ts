@@ -1,4 +1,5 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { KakaoLoginDto } from './dto/kakao-login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -9,18 +10,21 @@ import { AdminLoginDto } from './dto/admin-login.dto';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Throttle({ auth: { limit: 10, ttl: 60000 } })
   @Post('kakao')
   @HttpCode(HttpStatus.OK)
   async kakaoLogin(@Body() dto: KakaoLoginDto): Promise<AuthResponseDto> {
     return await this.authService.kakaoLogin(dto.kakaoAccessToken);
   }
 
+  @Throttle({ auth: { limit: 10, ttl: 60000 } })
   @Post('admin-login')
   @HttpCode(HttpStatus.OK)
   async adminLogin(@Body() dto: AdminLoginDto): Promise<AuthResponseDto> {
     return await this.authService.adminLogin(dto.email, dto.password);
   }
 
+  @Throttle({ auth: { limit: 10, ttl: 60000 } })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(@Body() dto: RefreshTokenDto): Promise<AuthResponseDto> {

@@ -1,5 +1,4 @@
 import {
-  IsEnum,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -8,7 +7,6 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { StoreType } from '../entities/store.entity';
 
 export class CreateStoreDto {
   @IsNotEmpty()
@@ -16,8 +14,10 @@ export class CreateStoreDto {
   @MaxLength(100)
   name: string;
 
-  @IsEnum(StoreType)
-  type: StoreType;
+  @IsNotEmpty()
+  @IsString()
+  @MaxLength(50)
+  type: string; // 기본 또는 커스텀 카테고리 모두 지원
 
   @IsNumber()
   @Min(-90)
