@@ -37,6 +37,7 @@ describe('PriceReactionService', () => {
     nickname: '테스트유저',
     profileImageUrl: null,
     fcmToken: null,
+    nicknameChangedAt: null,
     latitude: null,
     longitude: null,
     role: UserRole.USER,

@@ -69,7 +69,7 @@ export class UserController {
 
   @Patch(':id/nickname')
   @UseGuards(JwtAuthGuard, ThrottlerGuard)
-  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 1분(60초)에 3번까지만 변경 가능
+  @Throttle({ default: { limit: 10, ttl: 600000 } }) // 10분에 10번
   async updateNickname(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateNicknameDto: UpdateNicknameDto,
@@ -86,5 +86,12 @@ export class UserController {
     @CurrentUser() requestUser: AuthUser,
   ) {
     return await this.userService.updateFcmToken(id, body.fcmToken, requestUser);
+  }
+
+  @Delete('me')
+  @UseGuards(JwtAuthGuard)
+  async deleteAccount(@CurrentUser() requestUser: AuthUser) {
+    await this.userService.deleteAccount(requestUser.userId, requestUser);
+    return { success: true };
   }
 }

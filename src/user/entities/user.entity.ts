@@ -59,6 +59,9 @@ export class User {
   @Column({ nullable: true })
   fcmToken: string | null;
 
+  @Column({ type: 'timestamp', nullable: true })
+  nicknameChangedAt: Date | null;
+
   @Column({ type: 'int', default: 0 })
   trustScore: number;
 

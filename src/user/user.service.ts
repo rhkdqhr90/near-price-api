@@ -13,12 +13,18 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import type { AuthUser } from '../auth/types/auth-user.type';
 import { containsBannedWords } from '../common/constants/banned-words';
+import { Price } from '../price/entities/price.entity';
+import { UserOauth } from './entities/user-oauth.entity';
 
 @Injectable()
 export class UserService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Price)
+    private readonly priceRepository: Repository<Price>,
+    @InjectRepository(UserOauth)
+    private readonly userOauthRepository: Repository<UserOauth>,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserResponseDto> {
@@ -95,6 +101,16 @@ export class UserService {
       throw new BadRequestException('닉네임은 공백으로만 이루어질 수 없습니다.');
     }
 
+    // 3일 제한: 마지막 변경 후 3일이 지나지 않았으면 거부
+    if (user.nicknameChangedAt) {
+      const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+      const elapsed = Date.now() - new Date(user.nicknameChangedAt).getTime();
+      if (elapsed < threeDaysMs) {
+        const remainDays = Math.ceil((threeDaysMs - elapsed) / (24 * 60 * 60 * 1000));
+        throw new BadRequestException(`닉네임은 3일에 한 번만 변경할 수 있습니다. (${remainDays}일 후 가능)`);
+      }
+    }
+
     // 금칙어 필터링
     if (containsBannedWords(nickname)) {
       throw new BadRequestException('사용할 수 없는 닉네임입니다.');
@@ -109,6 +125,7 @@ export class UserService {
     }
 
     user.nickname = nickname;
+    user.nicknameChangedAt = new Date();
     const saved = await this.userRepository.save(user);
     return UserResponseDto.from(saved);
   }
@@ -119,5 +136,32 @@ export class UserService {
     }
     await this.userRepository.update(id, { fcmToken });
     return { success: true };
+  }
+
+  async deleteAccount(id: string, requestUser: AuthUser): Promise<void> {
+    // 본인 계정만 삭제 가능
+    if (requestUser.userId !== id) {
+      throw new ForbiddenException('본인의 계정만 삭제할 수 있습니다.');
+    }
+
+    const user = await this.userRepository.findOne({ where: { id } });
+    if (!user) {
+      throw new NotFoundException(`User #${id} not found`);
+    }
+
+    // 1. 유저가 등록한 가격 데이터의 user를 null로 설정 (익명화)
+    await this.priceRepository
+      .createQueryBuilder()
+      .update(Price)
+      .set({ user: null })
+      .where('user_id = :userId', { userId: id })
+      .execute();
+
+    // 2. 유저의 OAuth 데이터 삭제
+    await this.userOauthRepository.delete({ user: { id } });
+
+    // 3. 유저의 개인정보 삭제 (email, nickname, profileImageUrl, fcmToken)
+    // 하드 삭제로 처리
+    await this.userRepository.remove(user);
   }
 }

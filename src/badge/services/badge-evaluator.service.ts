@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { BadgeCategory } from '../entities/badge-definition.entity';
+import { User } from '../../user/entities/user.entity';
+import { Price } from '../../price/entities/price.entity';
 
 export interface BadgeEvaluationContext {
   totalRegistrations: number;
@@ -10,6 +14,39 @@ export interface BadgeEvaluationContext {
 
 @Injectable()
 export class BadgeEvaluatorService {
+  constructor(
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+  ) {}
+
+  /**
+   * 사용자 뱃지 정보 조회 (API 응답용)
+   */
+  async getUserBadges(userId: string) {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['prices'],
+    });
+    if (!user) {
+      return { earned: [], progress: [], definitions: this.getAllBadgeDefinitions() };
+    }
+
+    const context: BadgeEvaluationContext = {
+      totalRegistrations: user.prices?.length ?? 0,
+      totalVerifications: 0, // TODO: 검증 수 조회
+      trustScore: user.trustScore ?? 0,
+    };
+
+    const earnedIds = this.evaluateEarnedBadges(context);
+    const earned = earnedIds.map(id => this.getBadgeDefinition(id)).filter(Boolean);
+    const progress = this.evaluateProgressBadges(context);
+
+    return {
+      earned,
+      progress,
+      definitions: this.getAllBadgeDefinitions(),
+    };
+  }
   /**
    * 뱃지 정의 (마스터 데이터)
    */

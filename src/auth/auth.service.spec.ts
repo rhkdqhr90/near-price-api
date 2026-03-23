@@ -29,6 +29,7 @@ describe('AuthService', () => {
     nickname: '테스트유저',
     profileImageUrl: null,
     fcmToken: null,
+    nicknameChangedAt: null,
     latitude: null as unknown as number,
     longitude: null as unknown as number,
     role: UserRole.USER,

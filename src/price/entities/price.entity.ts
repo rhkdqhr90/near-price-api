@@ -21,7 +21,7 @@ export class Price {
     nullable: true,
   })
   @JoinColumn({ name: 'user_id' })
-  user: User;
+  user: User | null;
 
   @ManyToOne(() => Store, (store) => store.prices, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'store_id' })
