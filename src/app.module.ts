@@ -30,6 +30,8 @@ import { BadgeModule } from './badge/badge.module';
 import { BadgeDefinition } from './badge/entities/badge-definition.entity';
 import { UserBadge } from './badge/entities/user-badge.entity';
 import { HealthModule } from './health/health.module';
+import { InquiryModule } from './inquiry/inquiry.module';
+import { Inquiry } from './inquiry/entities/inquiry.entity';
 
 @Module({
   imports: [
@@ -71,6 +73,7 @@ import { HealthModule } from './health/health.module';
           UserTrustScore,
           BadgeDefinition,
           UserBadge,
+          Inquiry,
         ],
         synchronize: configService.get('NODE_ENV') !== 'production',
       }),
@@ -90,6 +93,7 @@ import { HealthModule } from './health/health.module';
     TrustScoreModule,
     BadgeModule,
     HealthModule,
+    InquiryModule,
   ],
   providers: [
     {

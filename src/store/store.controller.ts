@@ -33,6 +33,13 @@ export class StoreController {
     return await this.storeService.findAll();
   }
 
+  @Get('search')
+  async searchByName(@Query('name') name: string) {
+    if (!name || name.trim().length < 1) return [];
+    if (name.length > 100) throw new BadRequestException('검색어는 100자 이하여야 합니다.');
+    return await this.storeService.searchByName(name.trim());
+  }
+
   @Get('nearby')
   async findNearby(@Query() query: NearbyStoreQueryDto) {
     return await this.storeService.findNearby(query);

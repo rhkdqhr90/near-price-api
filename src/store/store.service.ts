@@ -28,6 +28,16 @@ export class StoreService {
     return stores.map((store) => StoreResponseDto.from(store));
   }
 
+  async searchByName(name: string): Promise<StoreResponseDto[]> {
+    const stores = await this.storeRepository
+      .createQueryBuilder('store')
+      .where('LOWER(store.name) LIKE LOWER(:name)', { name: `%${name}%` })
+      .orderBy('store.name', 'ASC')
+      .limit(10)
+      .getMany();
+    return stores.map((store) => StoreResponseDto.from(store));
+  }
+
   async findByExternalPlaceId(
     externalPlaceId: string,
   ): Promise<StoreResponseDto> {
