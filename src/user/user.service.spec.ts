@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { UserService } from './user.service';
 import { User, UserRole } from './entities/user.entity';
 import { UserOauth } from './entities/user-oauth.entity';
@@ -94,11 +94,15 @@ describe('UserService', () => {
   let userRepo: MockRepository<User>;
   let priceRepo: MockRepository<Price>;
   let userOauthRepo: MockRepository<UserOauth>;
+  let mockDataSource: { transaction: jest.Mock };
 
   beforeEach(async () => {
     userRepo = createMockRepository<User>();
     priceRepo = createMockRepository<Price>();
     userOauthRepo = createMockRepository<UserOauth>();
+    mockDataSource = {
+      transaction: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -106,6 +110,7 @@ describe('UserService', () => {
         { provide: getRepositoryToken(User), useValue: userRepo },
         { provide: getRepositoryToken(Price), useValue: priceRepo },
         { provide: getRepositoryToken(UserOauth), useValue: userOauthRepo },
+        { provide: DataSource, useValue: mockDataSource },
       ],
     }).compile();
 
@@ -490,24 +495,102 @@ describe('UserService', () => {
   // deleteAccount
   // ─────────────────────────────────────────────────────────────────────────
   describe('deleteAccount', () => {
-    it('본인 계정을 삭제한다 (가격 익명화 + OAuth 삭제 + 유저 삭제)', async () => {
+    function makeTransactionManager() {
+      const qb = makeQueryBuilder();
+      const manager = {
+        createQueryBuilder: jest.fn().mockReturnValue(qb),
+        delete: jest.fn().mockResolvedValue({ affected: 1 }),
+        _qb: qb,
+      };
+      return manager;
+    }
+
+    it('본인 계정을 삭제한다 — 트랜잭션 콜백 실행', async () => {
       const user = makeUser();
       userRepo.findOne!.mockResolvedValue(user);
 
-      const qb = makeQueryBuilder();
-      priceRepo.createQueryBuilder!.mockReturnValue(qb);
-      userOauthRepo.delete!.mockResolvedValue({ affected: 1 });
-      userRepo.remove!.mockResolvedValue(user);
+      const manager = makeTransactionManager();
+      mockDataSource.transaction.mockImplementation(
+        (cb: (m: typeof manager) => Promise<void>) => cb(manager),
+      );
 
       await service.deleteAccount('user-id-1', makeAuthUser());
 
-      expect(priceRepo.createQueryBuilder).toHaveBeenCalled();
+      expect(mockDataSource.transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('트랜잭션 내 Price.user를 null로 익명화한다', async () => {
+      const user = makeUser();
+      userRepo.findOne!.mockResolvedValue(user);
+
+      const manager = makeTransactionManager();
+      mockDataSource.transaction.mockImplementation(
+        (cb: (m: typeof manager) => Promise<void>) => cb(manager),
+      );
+
+      await service.deleteAccount('user-id-1', makeAuthUser());
+
+      const qb = manager._qb;
+      expect(manager.createQueryBuilder).toHaveBeenCalled();
       expect(qb.update).toHaveBeenCalledWith(Price);
       expect(qb.set).toHaveBeenCalledWith({ user: null });
       expect(qb.where).toHaveBeenCalledWith('user_id = :userId', { userId: 'user-id-1' });
       expect(qb.execute).toHaveBeenCalled();
-      expect(userOauthRepo.delete).toHaveBeenCalledWith({ user: { id: 'user-id-1' } });
-      expect(userRepo.remove).toHaveBeenCalledWith(user);
+    });
+
+    it('트랜잭션 내 UserOauth를 삭제한다', async () => {
+      const user = makeUser();
+      userRepo.findOne!.mockResolvedValue(user);
+
+      const manager = makeTransactionManager();
+      mockDataSource.transaction.mockImplementation(
+        (cb: (m: typeof manager) => Promise<void>) => cb(manager),
+      );
+
+      await service.deleteAccount('user-id-1', makeAuthUser());
+
+      expect(manager.delete).toHaveBeenCalledWith(UserOauth, { user: { id: 'user-id-1' } });
+    });
+
+    it('트랜잭션 내 User를 삭제한다', async () => {
+      const user = makeUser();
+      userRepo.findOne!.mockResolvedValue(user);
+
+      const manager = makeTransactionManager();
+      mockDataSource.transaction.mockImplementation(
+        (cb: (m: typeof manager) => Promise<void>) => cb(manager),
+      );
+
+      await service.deleteAccount('user-id-1', makeAuthUser());
+
+      expect(manager.delete).toHaveBeenCalledWith(User, { id: 'user-id-1' });
+    });
+
+    it('트랜잭션 내 순서: Price 익명화 → UserOauth 삭제 → User 삭제', async () => {
+      const user = makeUser();
+      userRepo.findOne!.mockResolvedValue(user);
+
+      const callOrder: string[] = [];
+      const qb = makeQueryBuilder();
+      qb.execute = jest.fn().mockImplementation(() => {
+        callOrder.push('price-anonymize');
+        return Promise.resolve({});
+      });
+      const manager = {
+        createQueryBuilder: jest.fn().mockReturnValue(qb),
+        delete: jest.fn().mockImplementation((entity: unknown) => {
+          if (entity === UserOauth) callOrder.push('oauth-delete');
+          if (entity === User) callOrder.push('user-delete');
+          return Promise.resolve({ affected: 1 });
+        }),
+      };
+      mockDataSource.transaction.mockImplementation(
+        (cb: (m: typeof manager) => Promise<void>) => cb(manager),
+      );
+
+      await service.deleteAccount('user-id-1', makeAuthUser());
+
+      expect(callOrder).toEqual(['price-anonymize', 'oauth-delete', 'user-delete']);
     });
 
     it('타인 계정을 삭제하려 하면 ForbiddenException을 던진다', async () => {
@@ -518,12 +601,57 @@ describe('UserService', () => {
       );
     });
 
+    it('ForbiddenException 시 userRepository.findOne을 호출하지 않는다', async () => {
+      const requestUser = makeAuthUser({ userId: 'other-user' });
+
+      await expect(service.deleteAccount('user-id-1', requestUser)).rejects.toThrow(
+        ForbiddenException,
+      );
+
+      expect(userRepo.findOne).not.toHaveBeenCalled();
+    });
+
     it('존재하지 않는 계정이면 NotFoundException을 던진다', async () => {
       userRepo.findOne!.mockResolvedValue(null);
 
       await expect(service.deleteAccount('user-id-1', makeAuthUser())).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it('NotFoundException 시 트랜잭션을 시작하지 않는다', async () => {
+      userRepo.findOne!.mockResolvedValue(null);
+
+      await expect(service.deleteAccount('user-id-1', makeAuthUser())).rejects.toThrow(
+        NotFoundException,
+      );
+
+      expect(mockDataSource.transaction).not.toHaveBeenCalled();
+    });
+
+    it('트랜잭션 내부에서 오류 발생 시 예외가 전파된다', async () => {
+      const user = makeUser();
+      userRepo.findOne!.mockResolvedValue(user);
+
+      mockDataSource.transaction.mockRejectedValue(new Error('DB connection error'));
+
+      await expect(service.deleteAccount('user-id-1', makeAuthUser())).rejects.toThrow(
+        'DB connection error',
+      );
+    });
+
+    it('반환값은 void (undefined)', async () => {
+      const user = makeUser();
+      userRepo.findOne!.mockResolvedValue(user);
+
+      const manager = makeTransactionManager();
+      mockDataSource.transaction.mockImplementation(
+        (cb: (m: typeof manager) => Promise<void>) => cb(manager),
+      );
+
+      const result = await service.deleteAccount('user-id-1', makeAuthUser());
+
+      expect(result).toBeUndefined();
     });
   });
 });

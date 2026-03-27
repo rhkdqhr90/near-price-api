@@ -6,9 +6,13 @@ import { PriceVerification } from './entities/price-verification.entity';
 import { Price } from '../price/entities/price.entity';
 import { User } from '../user/entities/user.entity';
 import { PriceTrustScoreCalculator } from '../trust-score/services/price-trust-score.calculator';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([PriceVerification, Price, User])],
+  imports: [
+    TypeOrmModule.forFeature([PriceVerification, Price, User]),
+    NotificationModule,
+  ],
   controllers: [PriceVerificationController],
   providers: [PriceVerificationService, PriceTrustScoreCalculator],
   exports: [PriceVerificationService, PriceTrustScoreCalculator],

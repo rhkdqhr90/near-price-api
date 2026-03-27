@@ -96,8 +96,8 @@ export class TrustScoreScheduler {
   }
 
   /**
-   * 전체 사용자의 신뢰도 재계산
-   * - DB 쿼리에 날짜 조건 적용으로 메모리 사용량 최소화
+   * 전체 사용자의 신뢰도 재계산 (배치 쿼리로 N+1 방지)
+   * - 유저 목록 / 가격 / 검증 / 기존 점수를 각 1회씩 조회
    * - registrationScore: 최근 90일 등록 가격의 평균 신뢰도
    * - verificationScore: 최근 30일 검증 중 다수 의견과 일치한 비율
    * - activeDays: 최근 30일 활동 일수 (가격 등록 + 검증 기준)
@@ -109,16 +109,68 @@ export class TrustScoreScheduler {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const users = await this.userRepository.find();
+    const users = await this.userRepository.find({ select: { id: true } });
+
+    if (users.length === 0) return;
+
+    const userIds = users.map((u) => u.id);
+
+    // 배치 조회 1: 최근 90일 가격 전체 (userId별 그룹화용)
+    const allRecentPrices = await this.priceRepository.find({
+      where: {
+        user: { id: In(userIds) },
+        createdAt: MoreThanOrEqual(ninetyDaysAgo),
+      },
+      relations: ['user'],
+    });
+
+    // 배치 조회 2: 최근 30일 검증 전체 (userId별 그룹화용)
+    const allRecentVerifications = await this.verificationRepository.find({
+      where: {
+        verifier: { id: In(userIds) },
+        createdAt: MoreThanOrEqual(thirtyDaysAgo),
+      },
+      relations: ['verifier', 'price'],
+    });
+
+    // 배치 조회 3: 기존 UserTrustScore 전체
+    const existingScores = await this.userTrustScoreRepository.find({
+      where: { user: { id: In(userIds) } },
+      relations: ['user'],
+    });
+    const existingScoreByUserId = new Map(
+      existingScores.map((s) => [s.user.id, s]),
+    );
+
+    // userId별 그룹화 (메모리 내 처리)
+    const pricesByUserId = new Map<string, Price[]>();
+    for (const price of allRecentPrices) {
+      if (!price.user) continue;
+      const uid = price.user.id;
+      const list = pricesByUserId.get(uid) ?? [];
+      list.push(price);
+      pricesByUserId.set(uid, list);
+    }
+
+    const verificationsByUserId = new Map<string, PriceVerification[]>();
+    for (const v of allRecentVerifications) {
+      const uid = v.verifier.id;
+      const list = verificationsByUserId.get(uid) ?? [];
+      list.push(v);
+      verificationsByUserId.set(uid, list);
+    }
+
+    // 각 유저 계산 후 bulk write 준비
+    const userScoreUpdates: Array<{ id: string; trustScore: number }> = [];
+    const trustScoreInserts: UserTrustScore[] = [];
+    const trustScoreUpdates: Array<{
+      id: string;
+      data: Partial<UserTrustScore>;
+    }> = [];
 
     for (const user of users) {
-      // 최근 90일 가격 — DB에서 날짜 필터링 (메모리 전체 로드 방지)
-      const recentPrices = await this.priceRepository.find({
-        where: {
-          user: { id: user.id },
-          createdAt: MoreThanOrEqual(ninetyDaysAgo),
-        },
-      });
+      const recentPrices = pricesByUserId.get(user.id) ?? [];
+      const recentVerifications = verificationsByUserId.get(user.id) ?? [];
 
       // registrationScore: 최근 90일 가격 중 점수가 있는 것의 평균
       const scoredPrices = recentPrices.filter((p) => p.trustScore !== null);
@@ -127,15 +179,6 @@ export class TrustScoreScheduler {
           ? scoredPrices.reduce((sum, p) => sum + (p.trustScore ?? 50), 0) /
             scoredPrices.length
           : 50;
-
-      // 최근 30일 검증 내역 — DB에서 날짜 필터링
-      const recentVerifications = await this.verificationRepository.find({
-        where: {
-          verifier: { id: user.id },
-          createdAt: MoreThanOrEqual(thirtyDaysAgo),
-        },
-        relations: ['price'],
-      });
 
       // verificationScore: 다수 의견과 일치한 검증 비율
       let alignedCount = 0;
@@ -165,44 +208,54 @@ export class TrustScoreScheduler {
       const result = this.userTrustScoreCalculator.calculateUserTrustScore({
         registrationScore,
         verificationScore,
-        consistencyBonus: 0, // 내부에서 activeDays로 재계산
+        consistencyBonus: 0,
         totalRegistrations: recentPrices.length,
         totalVerifications: recentVerifications.length,
         activeDays: activeDaySet.size,
       });
 
-      // UserTrustScore upsert
-      const existing = await this.userTrustScoreRepository.findOne({
-        where: { user: { id: user.id } },
+      userScoreUpdates.push({
+        id: user.id,
+        trustScore: Math.round(result.trustScore),
       });
+
+      const scoreData = {
+        trustScore: result.trustScore,
+        registrationScore: result.registrationScore,
+        verificationScore: result.verificationScore,
+        consistencyBonus: result.consistencyBonus,
+        totalRegistrations: recentPrices.length,
+        totalVerifications: recentVerifications.length,
+      };
+
+      const existing = existingScoreByUserId.get(user.id);
       if (existing) {
-        await this.userTrustScoreRepository.update(existing.id, {
-          trustScore: result.trustScore,
-          registrationScore: result.registrationScore,
-          verificationScore: result.verificationScore,
-          consistencyBonus: result.consistencyBonus,
-          totalRegistrations: recentPrices.length,
-          totalVerifications: recentVerifications.length,
-        });
+        trustScoreUpdates.push({ id: existing.id, data: scoreData });
       } else {
-        await this.userTrustScoreRepository.save(
+        trustScoreInserts.push(
           this.userTrustScoreRepository.create({
-            user,
-            trustScore: result.trustScore,
-            registrationScore: result.registrationScore,
-            verificationScore: result.verificationScore,
-            consistencyBonus: result.consistencyBonus,
-            totalRegistrations: recentPrices.length,
-            totalVerifications: recentVerifications.length,
+            user: { id: user.id } as User,
+            ...scoreData,
           }),
         );
       }
-
-      // User.trustScore 정수 업데이트 (빠른 조회용)
-      await this.userRepository.update(user.id, {
-        trustScore: Math.round(result.trustScore),
-      });
     }
+
+    // Bulk write: UserTrustScore insert
+    if (trustScoreInserts.length > 0) {
+      await this.userTrustScoreRepository.save(trustScoreInserts);
+    }
+
+    // Bulk write: UserTrustScore update + User.trustScore update (병렬 실행)
+    await Promise.all([
+      ...trustScoreUpdates.map(({ id, data }) =>
+        this.userTrustScoreRepository.update(id, data),
+      ),
+      ...userScoreUpdates.map(({ id, trustScore }) =>
+        this.userRepository.update(id, { trustScore }),
+      ),
+    ]);
+
     this.logger.log(`사용자 신뢰도 재계산 완료: ${users.length}명`);
   }
 }

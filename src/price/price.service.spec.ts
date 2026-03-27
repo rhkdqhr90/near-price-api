@@ -82,7 +82,7 @@ function buildPrice(
   price.imageUrl = 'https://example.com/image.jpg';
   price.saleStartDate = null as unknown as Date;
   price.saleEndDate = null as unknown as Date;
-  price.condition = null as unknown as string;
+  price.condition = null;
   price.likeCount = 0;
   price.reportCount = 0;
   price.createdAt = new Date('2025-01-01');

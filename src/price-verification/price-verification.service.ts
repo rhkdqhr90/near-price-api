@@ -382,7 +382,23 @@ export class PriceVerificationService {
   /**
    * 사용자 신뢰도 점수 재계산
    */
-  async recalculateTrustScore(_userId: string): Promise<void> {
-    // Implementation for recalculating trust score
+  async recalculateTrustScore(userId: string): Promise<void> {
+    const since90d = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+
+    const verifications = await this.verificationRepository.find({
+      where: {
+        verifier: { id: userId },
+        createdAt: MoreThan(since90d),
+      },
+    });
+
+    const total = verifications.length;
+    const correct = verifications.filter(
+      (v) => v.result === VerificationResult.CONFIRMED,
+    ).length;
+
+    const score = total === 0 ? 50 : Math.round((correct / total) * 100);
+
+    await this.userRepository.update(userId, { trustScore: score });
   }
 }

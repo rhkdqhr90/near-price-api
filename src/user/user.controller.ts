@@ -21,6 +21,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateNicknameDto } from './dto/update-nickname.dto';
 import { CheckNicknameDto } from './dto/check-nickname.dto';
 import { UpdateNotificationSettingsDto } from './dto/update-notification-settings.dto';
+import { UpdateFcmTokenDto } from './dto/update-fcm-token.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @Controller('user')
@@ -39,6 +40,7 @@ export class UserController {
     return await this.userService.findAll(pagination);
   }
 
+  // Public endpoint: 닉네임 중복 확인은 비로그인 사용자도 가능
   @Get('check-nickname')
   @Throttle({ default: { limit: 20, ttl: 60000 } }) // 1분에 20회로 제한 (사용자 열거 공격 방지)
   async checkNickname(
@@ -62,6 +64,13 @@ export class UserController {
     @CurrentUser() requestUser: AuthUser,
   ) {
     return await this.userService.update(id, updateUserDto, requestUser);
+  }
+
+  @Delete('me')
+  @UseGuards(JwtAuthGuard)
+  async deleteAccount(@CurrentUser() requestUser: AuthUser) {
+    await this.userService.deleteAccount(requestUser.userId, requestUser);
+    return { success: true };
   }
 
   @Delete(':id')
@@ -89,14 +98,10 @@ export class UserController {
   @UseGuards(JwtAuthGuard)
   async updateFcmToken(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { fcmToken: string },
+    @Body() dto: UpdateFcmTokenDto,
     @CurrentUser() requestUser: AuthUser,
   ) {
-    return await this.userService.updateFcmToken(
-      id,
-      body.fcmToken,
-      requestUser,
-    );
+    return await this.userService.updateFcmToken(id, dto.fcmToken, requestUser);
   }
 
   @Patch(':id/notification-settings')
@@ -111,12 +116,5 @@ export class UserController {
       dto,
       requestUser,
     );
-  }
-
-  @Delete('me')
-  @UseGuards(JwtAuthGuard)
-  async deleteAccount(@CurrentUser() requestUser: AuthUser) {
-    await this.userService.deleteAccount(requestUser.userId, requestUser);
-    return { success: true };
   }
 }

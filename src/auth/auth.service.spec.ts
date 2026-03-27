@@ -185,11 +185,11 @@ describe('AuthService', () => {
         await service.kakaoLogin('valid-kakao-token');
 
         expect(jwtService.signAsync).toHaveBeenCalledWith(
-          { sub: mockUser.id, email: mockUser.email },
+          { sub: mockUser.id, email: mockUser.email, type: 'access' },
           expect.objectContaining({ expiresIn: '1h' }),
         );
         expect(jwtService.signAsync).toHaveBeenCalledWith(
-          { sub: mockUser.id, email: mockUser.email },
+          { sub: mockUser.id, email: mockUser.email, type: 'refresh' },
           expect.objectContaining({ expiresIn: '7d' }),
         );
       });
@@ -268,7 +268,7 @@ describe('AuthService', () => {
         await service.kakaoLogin('new-user-kakao-token');
 
         expect(jwtService.signAsync).toHaveBeenCalledWith(
-          { sub: newUser.id, email: newUser.email },
+          { sub: newUser.id, email: newUser.email, type: 'access' },
           expect.objectContaining({ expiresIn: '1h' }),
         );
       });

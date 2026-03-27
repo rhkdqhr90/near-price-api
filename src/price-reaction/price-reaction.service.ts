@@ -13,6 +13,7 @@ import {
   PriceReaction,
   PriceReactionType,
 } from './entities/price-reaction.entity';
+import { DB_ERROR_CODES } from '../common/constants/db-error-codes';
 
 @Injectable()
 export class PriceReactionService {
@@ -65,7 +66,8 @@ export class PriceReactionService {
       );
     } catch (err: unknown) {
       // 동시 요청으로 인한 유니크 제약 위반: 이미 생성됨 → 무시
-      if ((err as { code?: string })?.code === '23505') return;
+      if ((err as { code?: string })?.code === DB_ERROR_CODES.UNIQUE_VIOLATION)
+        return;
       throw err;
     }
 
@@ -108,7 +110,9 @@ export class PriceReactionService {
         }),
       );
     } catch (err: unknown) {
-      if ((err as { code?: string })?.code === '23505') {
+      if (
+        (err as { code?: string })?.code === DB_ERROR_CODES.UNIQUE_VIOLATION
+      ) {
         throw new ConflictException('이미 신고한 가격입니다.');
       }
       throw err;

@@ -37,6 +37,7 @@ import { NotificationModule } from './notification/notification.module';
 import { FlyerModule } from './flyer/flyer.module';
 import { Flyer } from './flyer/entities/flyer.entity';
 import { OwnerPost } from './flyer/entities/owner-post.entity';
+import { NaverModule } from './naver/naver.module';
 
 @Module({
   imports: [
@@ -104,6 +105,7 @@ import { OwnerPost } from './flyer/entities/owner-post.entity';
     InquiryModule,
     NotificationModule,
     FlyerModule,
+    NaverModule,
   ],
   providers: [
     {

@@ -1,5 +1,6 @@
 import { IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
+import { DEFAULT_PAGINATION_LIMIT } from '../../common/constants/pagination.constants';
 
 export class SearchProductQueryDto {
   @IsOptional()
@@ -11,7 +12,7 @@ export class SearchProductQueryDto {
   @IsNumber()
   @Min(1)
   @Max(50)
-  limit?: number = 10;
+  limit?: number = DEFAULT_PAGINATION_LIMIT;
 }
 
 export class SearchProductResponseDto {

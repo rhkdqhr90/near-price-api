@@ -10,6 +10,7 @@ import { User } from '../user/entities/user.entity';
 import { Product } from '../product/entities/product.entity';
 import { CreateWishlistDto } from './dto/create-wishlist.dto';
 import { WishlistResponseDto } from './dto/wishlist-response.dto';
+import { DB_ERROR_CODES } from '../common/constants/db-error-codes';
 
 @Injectable()
 export class WishlistService {
@@ -48,7 +49,8 @@ export class WishlistService {
     } catch (e) {
       if (
         e instanceof QueryFailedError &&
-        (e as QueryFailedError & { code: string }).code === '23505'
+        (e as QueryFailedError & { code: string }).code ===
+          DB_ERROR_CODES.UNIQUE_VIOLATION
       ) {
         throw new ConflictException('이미 찜한 상품입니다.');
       }
@@ -74,11 +76,24 @@ export class WishlistService {
       throw new NotFoundException('존재하지 않는 사용자입니다.');
     }
 
-    const wishlists = await this.wishlistRepository.find({
-      where: { user: { id: userId } },
-      relations: ['product', 'product.prices', 'product.prices.store'],
-      order: { createdAt: 'DESC' },
-    });
+    const wishlists = await this.wishlistRepository
+      .createQueryBuilder('w')
+      .innerJoin('w.user', 'user')
+      .leftJoinAndSelect('w.product', 'product')
+      .leftJoinAndSelect(
+        'product.prices',
+        'price',
+        `price.id = (
+          SELECT p2.id FROM prices p2
+          WHERE p2.product_id = product.id
+          ORDER BY p2.price ASC
+          LIMIT 1
+        )`,
+      )
+      .leftJoinAndSelect('price.store', 'store')
+      .where('user.id = :userId', { userId })
+      .orderBy('w.createdAt', 'DESC')
+      .getMany();
 
     return WishlistResponseDto.from(wishlists);
   }

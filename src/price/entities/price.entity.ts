@@ -57,14 +57,14 @@ export class Price {
 
   // 세일 기간
   @Column({ type: 'date', nullable: true })
-  saleStartDate: Date;
+  saleStartDate: Date | null;
 
   @Column({ type: 'date', nullable: true })
-  saleEndDate: Date;
+  saleEndDate: Date | null;
 
   // 제품 상태
   @Column({ nullable: true })
-  condition: string;
+  condition: string | null;
 
   @Column({ default: true })
   isActive: boolean;
@@ -98,9 +98,6 @@ export class Price {
 
   @Column({ type: 'int', default: 0 })
   disputedCount: number;
-
-  @Column({ type: 'uuid', nullable: true })
-  sourceVerificationId: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

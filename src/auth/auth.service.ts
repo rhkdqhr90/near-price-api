@@ -95,6 +95,10 @@ export class AuthService {
       throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다.');
     }
 
+    if (payload.type !== 'refresh') {
+      throw new UnauthorizedException('유효하지 않은 토큰 타입입니다.');
+    }
+
     const user = await this.userRepository.findOne({
       where: { id: payload.sub },
     });
@@ -176,13 +180,22 @@ export class AuthService {
   }
 
   private async issueTokens(user: User): Promise<AuthResponseDto> {
-    const payload: JwtPayload = { sub: user.id, email: user.email };
+    const accessPayload: JwtPayload = {
+      sub: user.id,
+      email: user.email,
+      type: 'access',
+    };
+    const refreshPayload: JwtPayload = {
+      sub: user.id,
+      email: user.email,
+      type: 'refresh',
+    };
 
-    const accessToken = await this.jwtService.signAsync(payload, {
+    const accessToken = await this.jwtService.signAsync(accessPayload, {
       expiresIn: this.configService.getOrThrow('JWT_EXPIRES_IN'),
     });
 
-    const refreshToken = await this.jwtService.signAsync(payload, {
+    const refreshToken = await this.jwtService.signAsync(refreshPayload, {
       expiresIn: this.configService.getOrThrow('JWT_REFRESH_EXPIRES_IN'),
     });
 

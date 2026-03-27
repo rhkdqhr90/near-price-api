@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { User, UserRole } from './entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -27,6 +27,7 @@ export class UserService {
     private readonly priceRepository: Repository<Price>,
     @InjectRepository(UserOauth)
     private readonly userOauthRepository: Repository<UserOauth>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserResponseDto> {
@@ -180,19 +181,21 @@ export class UserService {
       throw new NotFoundException(`User #${id} not found`);
     }
 
-    // 1. 유저가 등록한 가격 데이터의 user를 null로 설정 (익명화)
-    await this.priceRepository
-      .createQueryBuilder()
-      .update(Price)
-      .set({ user: null })
-      .where('user_id = :userId', { userId: id })
-      .execute();
+    await this.dataSource.transaction(async (manager) => {
+      // 1. 유저가 등록한 가격 데이터의 user를 null로 설정 (익명화)
+      await manager
+        .createQueryBuilder()
+        .update(Price)
+        .set({ user: null })
+        .where('user_id = :userId', { userId: id })
+        .execute();
 
-    // 2. 유저의 OAuth 데이터 삭제
-    await this.userOauthRepository.delete({ user: { id } });
+      // 2. 유저의 OAuth 데이터 삭제
+      await manager.delete(UserOauth, { user: { id } });
 
-    // 3. 유저의 개인정보 삭제 (email, nickname, profileImageUrl, fcmToken)
-    // 하드 삭제로 처리
-    await this.userRepository.remove(user);
+      // 3. 유저의 개인정보 삭제 (email, nickname, profileImageUrl, fcmToken)
+      // 하드 삭제로 처리 (트랜잭션 manager로 직접 삭제)
+      await manager.delete(User, { id });
+    });
   }
 }

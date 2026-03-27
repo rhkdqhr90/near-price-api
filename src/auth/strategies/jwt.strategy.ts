@@ -12,6 +12,7 @@ export type { AuthUser };
 export interface JwtPayload {
   sub: string;
   email: string;
+  type: 'access' | 'refresh';
 }
 
 @Injectable()
@@ -30,6 +31,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   }
 
   async validate(payload: JwtPayload): Promise<AuthUser> {
+    if (payload.type !== 'access') {
+      throw new UnauthorizedException('유효하지 않은 토큰 타입입니다.');
+    }
     const user = await this.userRepository.findOne({
       where: { id: payload.sub },
     });
