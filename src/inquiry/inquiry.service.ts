@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Inquiry } from './entities/inquiry.entity';
@@ -11,15 +11,21 @@ export class InquiryService {
   constructor(
     @InjectRepository(Inquiry)
     private readonly inquiryRepository: Repository<Inquiry>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
   async create(
     createInquiryDto: CreateInquiryDto,
-    user?: User,
+    userId: string,
   ): Promise<InquiryResponseDto> {
+    const user = await this.userRepository.findOneBy({ id: userId });
+    if (!user) {
+      throw new NotFoundException('사용자를 찾을 수 없습니다');
+    }
     const inquiry = this.inquiryRepository.create({
       ...createInquiryDto,
-      user: user || null,
+      user,
     });
 
     const saved = await this.inquiryRepository.save(inquiry);
@@ -32,6 +38,6 @@ export class InquiryService {
       order: { createdAt: 'DESC' },
     });
 
-    return inquiries.map(InquiryResponseDto.from);
+    return inquiries.map((i) => InquiryResponseDto.from(i));
   }
 }

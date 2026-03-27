@@ -1,0 +1,55 @@
+import type {
+  Flyer,
+  FlyerProductItem,
+  FlyerReviewItem,
+} from '../entities/flyer.entity';
+
+export class FlyerResponseDto {
+  id: string;
+  storeName: string;
+  promotionTitle: string;
+  badge: string;
+  badgeColor: string;
+  dateRange: string;
+  highlight: string;
+  bgColor: string;
+  emoji: string;
+  warningText: string | null;
+  ownerQuote: string | null;
+  ownerName: string | null;
+  ownerRole: string | null;
+  storeAddress: string | null;
+  storeRating: number | null;
+  storeReviewCount: number | null;
+  products: FlyerProductItem[] | null;
+  reviews: FlyerReviewItem[] | null;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+
+  static from(flyer: Flyer): FlyerResponseDto {
+    const dto = new FlyerResponseDto();
+    dto.id = flyer.id;
+    dto.storeName = flyer.storeName;
+    dto.promotionTitle = flyer.promotionTitle;
+    dto.badge = flyer.badge;
+    dto.badgeColor = flyer.badgeColor;
+    dto.dateRange = flyer.dateRange;
+    dto.highlight = flyer.highlight;
+    dto.bgColor = flyer.bgColor;
+    dto.emoji = flyer.emoji;
+    dto.warningText = flyer.warningText ?? null;
+    dto.ownerQuote = flyer.ownerQuote ?? null;
+    dto.ownerName = flyer.ownerName ?? null;
+    dto.ownerRole = flyer.ownerRole ?? null;
+    dto.storeAddress = flyer.storeAddress ?? null;
+    dto.storeRating = flyer.storeRating ?? null;
+    dto.storeReviewCount = flyer.storeReviewCount ?? null;
+    dto.products = flyer.products ?? null;
+    dto.reviews = flyer.reviews ?? null;
+    dto.isActive = flyer.isActive;
+    dto.createdAt = flyer.createdAt;
+    dto.updatedAt = flyer.updatedAt;
+    return dto;
+  }
+}

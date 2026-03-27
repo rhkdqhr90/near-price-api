@@ -9,7 +9,6 @@ import {
   Post,
   Query,
   UseGuards,
-  BadRequestException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
@@ -18,7 +17,11 @@ import type { AuthUser } from '../auth/types/auth-user.type';
 import { PriceService } from './price.service';
 import { CreatePriceDto } from './dto/create-price.dto';
 import { PriceResponseDto } from './dto/price-response.dto';
+import { ProductPriceCardDto } from './dto/product-price-card.dto';
 import { UpdatePriceDto } from './dto/update-price.dto';
+import { PaginationDto } from '../common/dto/pagination.dto';
+import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
+import { SearchPriceByNameDto } from './dto/search-price-by-name.dto';
 
 @Controller('price')
 export class PriceController {
@@ -35,13 +38,18 @@ export class PriceController {
 
   @Get('my')
   @UseGuards(JwtAuthGuard)
-  async findMine(@CurrentUser() user: AuthUser): Promise<PriceResponseDto[]> {
-    return await this.priceService.findByUser(user.userId);
+  async findMine(
+    @CurrentUser() user: AuthUser,
+    @Query() pagination: PaginationDto,
+  ): Promise<PaginatedResponseDto<PriceResponseDto>> {
+    return await this.priceService.findByUser(user.userId, pagination);
   }
 
   @Get('recent')
-  async findRecent(): Promise<PriceResponseDto[]> {
-    return await this.priceService.findRecent();
+  async findRecent(
+    @Query() pagination: PaginationDto,
+  ): Promise<PaginatedResponseDto<ProductPriceCardDto>> {
+    return await this.priceService.findRecentByProduct(pagination);
   }
 
   @Get('product/:productId')
@@ -53,19 +61,16 @@ export class PriceController {
 
   @Get('by-name')
   async findByProductName(
-    @Query('name') name: string,
+    @Query() dto: SearchPriceByNameDto,
   ): Promise<PriceResponseDto[]> {
-    if (!name || name.trim().length === 0) return [];
-    // 검색어 길이 제한 (DOS 방지)
-    if (name.length > 100) {
-      throw new BadRequestException('검색어는 100자 이하여야 합니다.');
-    }
-    return await this.priceService.findByProductName(name);
+    return await this.priceService.findByProductName(dto.name);
   }
 
   @Get()
-  async findAll(): Promise<PriceResponseDto[]> {
-    return await this.priceService.findAll();
+  async findAll(
+    @Query() pagination: PaginationDto,
+  ): Promise<PaginatedResponseDto<PriceResponseDto>> {
+    return await this.priceService.findAll(pagination);
   }
 
   @Get(':id')

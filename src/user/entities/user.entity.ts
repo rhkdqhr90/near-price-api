@@ -53,11 +53,17 @@ export class User {
   @Column({ type: 'enum', enum: UserRole, default: UserRole.USER })
   role: UserRole;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   profileImageUrl: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   fcmToken: string | null;
+
+  @Column({ default: true })
+  notifPriceChange: boolean;
+
+  @Column({ default: false })
+  notifPromotion: boolean;
 
   @Column({ type: 'timestamp', nullable: true })
   nicknameChangedAt: Date | null;

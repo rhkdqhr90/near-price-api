@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan, DataSource } from 'typeorm';
+import { Repository, MoreThan, DataSource } from 'typeorm';
 import {
   PriceVerification,
   VerificationResult,
@@ -18,6 +18,14 @@ import {
 import { Price } from '../price/entities/price.entity';
 import { User } from '../user/entities/user.entity';
 import { PriceTrustScoreCalculator } from '../trust-score/services/price-trust-score.calculator';
+import { NotificationService } from '../notification/notification.service';
+
+const VERIFICATION_BADGE_THRESHOLDS: Record<number, string> = {
+  10: '가격 확인러',
+  50: '꼼꼼한 검증자',
+  200: '검증 베테랑',
+  500: '검증 마스터',
+};
 
 @Injectable()
 export class PriceVerificationService {
@@ -30,6 +38,7 @@ export class PriceVerificationService {
     private userRepository: Repository<User>,
     private trustScoreCalculator: PriceTrustScoreCalculator,
     private dataSource: DataSource,
+    private notificationService: NotificationService,
   ) {}
 
   /**
@@ -56,20 +65,17 @@ export class PriceVerificationService {
     }
 
     // 24시간 내 중복 검증 확인
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const existingVerification = await this.verificationRepository.findOne({
       where: {
         price: { id: priceId },
         verifier: { id: userId },
-        createdAt: LessThan(new Date()),
+        createdAt: MoreThan(since24h),
       },
     });
 
     if (existingVerification) {
-      const timeDiff = Date.now() - existingVerification.createdAt.getTime();
-      if (timeDiff < 24 * 60 * 60 * 1000) {
-        throw new ForbiddenException('24시간 이내에 이미 검증했습니다');
-      }
+      throw new ForbiddenException('24시간 이내에 이미 검증했습니다');
     }
 
     // 검증자 조회
@@ -140,9 +146,7 @@ export class PriceVerificationService {
       }
       await queryRunner.manager.save(price);
 
-      await queryRunner.commitTransaction();
-
-      return {
+      const result: VerificationResponseDto = {
         id: savedVerification.id,
         priceId: savedVerification.price.id,
         result: savedVerification.result,
@@ -150,12 +154,59 @@ export class PriceVerificationService {
         newPriceId: newPrice?.id || null,
         createdAt: savedVerification.createdAt,
       };
+
+      await queryRunner.commitTransaction();
+
+      // 가격 등록자에게 검증 알림 (fire-and-forget)
+      void this.sendVerificationNotification(
+        price.user ?? null,
+        createVerificationDto.result,
+      );
+
+      // 검증자 뱃지 획득 확인 및 알림 (fire-and-forget)
+      void this.checkAndNotifyBadge(userId);
+
+      return result;
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
     } finally {
       await queryRunner.release();
     }
+  }
+
+  private async sendVerificationNotification(
+    priceOwner: User | null,
+    result: VerificationResult,
+  ): Promise<void> {
+    if (!priceOwner?.fcmToken) return;
+    const label = result === VerificationResult.CONFIRMED ? '맞아요' : '달라요';
+    await this.notificationService.sendToUser(
+      priceOwner.fcmToken,
+      '가격 검증 도착',
+      `누군가 회원님의 가격에 "${label}"를 남겼어요.`,
+    );
+  }
+
+  private async checkAndNotifyBadge(verifierId: string): Promise<void> {
+    const count = await this.verificationRepository.count({
+      where: { verifier: { id: verifierId } },
+    });
+
+    const badgeName = VERIFICATION_BADGE_THRESHOLDS[count];
+    if (!badgeName) return;
+
+    const verifier = await this.userRepository.findOne({
+      where: { id: verifierId },
+      select: ['id', 'fcmToken'],
+    });
+    if (!verifier?.fcmToken) return;
+
+    await this.notificationService.sendToUser(
+      verifier.fcmToken,
+      '새 뱃지 획득!',
+      `"${badgeName}" 뱃지를 획득했어요!`,
+    );
   }
 
   /**
@@ -227,7 +278,26 @@ export class PriceVerificationService {
   /**
    * 사용자가 검증한 가격 목록 조회
    */
-  async getVerificationsByVerifier(verifierId: string, page = 1, limit = 10) {
+  async getVerificationsByVerifier(
+    verifierId: string,
+    page = 1,
+    limit = 10,
+  ): Promise<{
+    data: Array<{
+      id: string;
+      priceId: string;
+      result: VerificationResult;
+      actualPrice: number | null;
+      price: {
+        id: string;
+        price: number;
+        product: { id: string; name: string };
+        store: { id: string; name: string };
+      };
+      createdAt: Date;
+    }>;
+    meta: { total: number };
+  }> {
     const [verifications, total] = await this.verificationRepository
       .createQueryBuilder('v')
       .where('v.verifier_id = :verifierId', { verifierId })
@@ -240,33 +310,43 @@ export class PriceVerificationService {
       .getManyAndCount();
 
     return {
-      data: verifications.map((v) => ({
-        id: v.id,
-        priceId: v.price.id,
-        result: v.result,
-        actualPrice: v.actualPrice,
-        price: {
-          id: v.price.id,
-          price: v.price.price,
-          product: {
-            id: v.price.product.id,
-            name: v.price.product.name,
+      data: verifications
+        .filter((v) => v.price && v.price.product && v.price.store)
+        .map((v) => ({
+          id: v.id,
+          priceId: v.price.id,
+          result: v.result,
+          actualPrice: v.actualPrice,
+          price: {
+            id: v.price.id,
+            price: v.price.price,
+            product: {
+              id: v.price.product.id,
+              name: v.price.product.name,
+            },
+            store: {
+              id: v.price.store.id,
+              name: v.price.store.name,
+            },
           },
-          store: {
-            id: v.price.store.id,
-            name: v.price.store.name,
-          },
-        },
-        createdAt: v.createdAt,
-      })),
+          createdAt: v.createdAt,
+        })),
       meta: { total },
     };
   }
 
   /**
-   * 가격에 대한 검증 데이터로 신뢰도 계산
+   * 가격에 대한 검증 데이터로 신뢰도 계산 + 상세 정보 반환
    */
   async calculatePriceTrustScore(priceId: string) {
+    const price = await this.priceRepository.findOne({
+      where: { id: priceId },
+    });
+
+    if (!price) {
+      throw new NotFoundException('가격 데이터를 찾을 수 없습니다');
+    }
+
     const verifications = await this.verificationRepository.find({
       where: { price: { id: priceId } },
       relations: ['verifier'],
@@ -277,16 +357,32 @@ export class PriceVerificationService {
       verifierTrustScore: v.verifier.trustScore,
     }));
 
-    return await this.trustScoreCalculator.calculatePriceTrustScore(
-      verificationData,
+    const scoreResult =
+      this.trustScoreCalculator.calculatePriceTrustScore(verificationData);
+
+    const registeredAt = price.createdAt;
+    const daysSinceRegistered = Math.floor(
+      (Date.now() - registeredAt.getTime()) / (1000 * 60 * 60 * 24),
     );
+    // 30일 이상 경과 + 검증 10건 미만이면 stale
+    const isStale =
+      daysSinceRegistered >= 30 && (price.verificationCount ?? 0) < 10;
+
+    return {
+      ...scoreResult,
+      verificationCount: price.verificationCount ?? 0,
+      confirmedCount: price.confirmedCount ?? 0,
+      disputedCount: price.disputedCount ?? 0,
+      registeredAt,
+      daysSinceRegistered,
+      isStale,
+    };
   }
 
   /**
    * 사용자 신뢰도 점수 재계산
    */
-  async recalculateTrustScore(userId: string) {
+  async recalculateTrustScore(_userId: string): Promise<void> {
     // Implementation for recalculating trust score
-    return await Promise.resolve();
   }
 }

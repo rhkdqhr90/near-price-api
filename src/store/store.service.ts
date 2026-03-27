@@ -9,6 +9,8 @@ import {
   NearbyStoreQueryDto,
   NearbyStoreResponseDto,
 } from './dto/nearby-store.dto';
+import { PaginationDto } from '../common/dto/pagination.dto';
+import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 
 @Injectable()
 export class StoreService {
@@ -23,9 +25,21 @@ export class StoreService {
     return StoreResponseDto.from(saved);
   }
 
-  async findAll(): Promise<StoreResponseDto[]> {
-    const stores = await this.storeRepository.find();
-    return stores.map((store) => StoreResponseDto.from(store));
+  async findAll(
+    pagination: PaginationDto,
+  ): Promise<PaginatedResponseDto<StoreResponseDto>> {
+    const { page, limit } = pagination;
+    const [stores, total] = await this.storeRepository.findAndCount({
+      order: { name: 'ASC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    return PaginatedResponseDto.of(
+      stores.map((store) => StoreResponseDto.from(store)),
+      total,
+      page,
+      limit,
+    );
   }
 
   async searchByName(name: string): Promise<StoreResponseDto[]> {

@@ -6,12 +6,15 @@ import { Price } from './entities/price.entity';
 import { Store } from '../store/entities/store.entity';
 import { Product } from '../product/entities/product.entity';
 import { User } from '../user/entities/user.entity';
+import { Wishlist } from '../wishlist/entities/wishlist.entity';
 import { PriceReactionModule } from '../price-reaction/price-reaction.module';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Price, Store, Product, User]),
+    TypeOrmModule.forFeature([Price, Store, Product, User, Wishlist]),
     PriceReactionModule,
+    NotificationModule,
   ],
   controllers: [PriceController],
   providers: [PriceService],

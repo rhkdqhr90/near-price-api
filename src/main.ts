@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nestjs';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
@@ -7,8 +8,18 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
 import helmet from 'helmet';
 import compression from 'compression';
 import * as express from 'express';
+import type { Request, Response, NextFunction } from 'express';
 
 async function bootstrap() {
+  // Sentry 초기화 (SENTRY_DSN 환경변수 설정 시 활성화)
+  if (process.env.SENTRY_DSN) {
+    Sentry.init({
+      dsn: process.env.SENTRY_DSN,
+      environment: process.env.NODE_ENV ?? 'development',
+      tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+    });
+  }
+
   // 프로덕션 환경에서 로그 레벨 제한
   const logLevel: ('error' | 'warn' | 'log' | 'debug' | 'verbose' | 'fatal')[] =
     process.env.NODE_ENV === 'production'
@@ -60,9 +71,9 @@ async function bootstrap() {
 
   // HTTPS 리다이렉트 미들웨어 (프로덕션 환경)
   if (process.env.NODE_ENV === 'production') {
-    app.use((req: any, res: any, next: any) => {
-      if (req.header('x-forwarded-proto') !== 'https') {
-        res.redirect(`https://${req.header('host')}${req.url}`);
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      if (req.headers['x-forwarded-proto'] !== 'https') {
+        res.redirect(`https://${req.headers.host ?? ''}${req.url}`);
       } else {
         next();
       }

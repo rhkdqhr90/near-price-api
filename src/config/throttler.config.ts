@@ -1,6 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { ThrottlerModuleOptions } from '@nestjs/throttler';
-import { seconds, minutes } from '@nestjs/throttler';
+import { minutes } from '@nestjs/throttler';
 
 /**
  * Rate Limiting 설정
@@ -12,10 +12,8 @@ import { seconds, minutes } from '@nestjs/throttler';
  */
 
 export const createThrottlerConfig = (
-  configService: ConfigService,
+  _configService: ConfigService,
 ): ThrottlerModuleOptions => {
-  const isProduction = configService.get('NODE_ENV') === 'production';
-
   return [
     // 기본 Rate Limit: 1분에 100요청
     {

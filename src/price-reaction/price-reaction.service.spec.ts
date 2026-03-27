@@ -37,6 +37,8 @@ describe('PriceReactionService', () => {
     nickname: '테스트유저',
     profileImageUrl: null,
     fcmToken: null,
+    notifPriceChange: true,
+    notifPromotion: false,
     nicknameChangedAt: null,
     latitude: null,
     longitude: null,
@@ -264,11 +266,11 @@ describe('PriceReactionService', () => {
         reason,
       });
       expect(reactionRepository.save).toHaveBeenCalledWith(newReaction);
-      // trustScore 재계산 호출 확인
+      // trustScore 재계산 호출 확인 (Math.max(0, -2) = 0)
       expect(reactionRepository.createQueryBuilder).toHaveBeenCalledWith('pr');
       expect(userRepository.update).toHaveBeenCalledWith(
         { id: mockPriceOwner.id },
-        { trustScore: -2 },
+        { trustScore: 0 },
       );
     });
 
@@ -303,11 +305,11 @@ describe('PriceReactionService', () => {
           reason,
         }),
       );
-      // trustScore 재계산 호출 확인
+      // trustScore 재계산 호출 확인 (Math.max(0, -1) = 0)
       expect(reactionRepository.createQueryBuilder).toHaveBeenCalled();
       expect(userRepository.update).toHaveBeenCalledWith(
         { id: mockPriceOwner.id },
-        { trustScore: -1 },
+        { trustScore: 0 },
       );
     });
 
@@ -439,9 +441,10 @@ describe('PriceReactionService', () => {
 
       expect(reactionRepository.createQueryBuilder).toHaveBeenCalledTimes(1);
       expect(qb.getRawOne).toHaveBeenCalledTimes(1);
+      // Math.max(0, -4) = 0: 신뢰도 점수는 0 미만으로 내려가지 않음
       expect(userRepository.update).toHaveBeenCalledWith(
         { id: mockPriceOwner.id },
-        { trustScore: -4 },
+        { trustScore: 0 },
       );
     });
 

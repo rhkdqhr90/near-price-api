@@ -135,8 +135,13 @@ export class AuthService {
         kakaoUser.kakao_account?.profile?.profile_image_url ??
         kakaoUser.kakao_account?.profile?.thumbnail_image_url ??
         null;
-      if (newProfileImage && existing.user.profileImageUrl !== newProfileImage) {
-        await this.userRepository.update(existing.user.id, { profileImageUrl: newProfileImage });
+      if (
+        newProfileImage &&
+        existing.user.profileImageUrl !== newProfileImage
+      ) {
+        await this.userRepository.update(existing.user.id, {
+          profileImageUrl: newProfileImage,
+        });
         existing.user.profileImageUrl = newProfileImage;
       }
       return existing.user;
@@ -152,7 +157,11 @@ export class AuthService {
       null;
 
     return await this.dataSource.transaction(async (em) => {
-      const user = em.create(User, { email, nickname, profileImageUrl });
+      const user = em.create(User, {
+        email,
+        nickname,
+        profileImageUrl: profileImageUrl ?? null,
+      });
       const savedUser = await em.save(user);
 
       const oauth = em.create(UserOauth, {
@@ -185,6 +194,7 @@ export class AuthService {
       email: user.email,
       nickname: user.nickname,
       trustScore: user.trustScore,
+      profileImageUrl: user.profileImageUrl ?? null,
     };
     return dto;
   }

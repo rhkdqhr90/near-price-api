@@ -18,6 +18,7 @@ import {
   VerificationResponseDto,
   VerificationListResponseDto,
 } from './dto/verification-response.dto';
+import { VerificationResult } from './entities/price-verification.entity';
 
 @Controller('prices')
 export class PriceVerificationController {
@@ -42,8 +43,36 @@ export class PriceVerificationController {
   }
 
   /**
+   * GET /prices/my/verifications
+   * 내가 검증한 가격 목록 조회
+   */
+  @Get('my/verifications')
+  @UseGuards(JwtAuthGuard)
+  async getMyVerifications(
+    @CurrentUser() user: AuthUser,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pageNum = parseInt(page || '1', 10);
+    const limitNum = parseInt(limit || '20', 10);
+
+    if (isNaN(pageNum) || pageNum < 1) {
+      throw new BadRequestException('Invalid page parameter');
+    }
+    if (isNaN(limitNum) || limitNum < 1 || limitNum > 100) {
+      throw new BadRequestException('Invalid limit parameter (max 100)');
+    }
+
+    return await this.verificationService.getVerificationsByVerifier(
+      user.userId,
+      pageNum,
+      limitNum,
+    );
+  }
+
+  /**
    * GET /prices/:priceId/verifications
-   * 특정 가격의 검증 목록 조회
+   * 특정 가격의 검증 목록 조회 (공개 엔드포인트: 인증 불필요)
    */
   @Get(':priceId/verifications')
   async getVerifications(
@@ -52,6 +81,14 @@ export class PriceVerificationController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ): Promise<VerificationListResponseDto> {
+    // result enum 검증
+    if (
+      result !== undefined &&
+      !Object.values(VerificationResult).includes(result as VerificationResult)
+    ) {
+      throw new BadRequestException('Invalid result parameter');
+    }
+
     // page, limit 입력 검증 (SQL Injection 방지)
     const pageNum = parseInt(page || '1', 10);
     const limitNum = parseInt(limit || '10', 10);
@@ -65,7 +102,7 @@ export class PriceVerificationController {
 
     return await this.verificationService.getVerificationsByPrice(
       priceId,
-      result as any,
+      result as VerificationResult | undefined,
       pageNum,
       limitNum,
     );
@@ -73,22 +110,22 @@ export class PriceVerificationController {
 
   /**
    * GET /prices/:priceId/trust-score
-   * 특정 가격의 신뢰도 점수 조회
+   * 특정 가격의 신뢰도 점수 조회 (공개 엔드포인트: 인증 불필요)
    */
   @Get(':priceId/trust-score')
   async getPriceTrustScore(@Param('priceId', ParseUUIDPipe) priceId: string) {
-    const { score, status } =
+    const result =
       await this.verificationService.calculatePriceTrustScore(priceId);
     return {
       priceId,
-      trustScore: score,
-      status,
-      verificationCount: 0, // TODO: price repository에서 가져오기
-      confirmedCount: 0,
-      disputedCount: 0,
-      isStale: false, // TODO: createdAt 기반으로 계산
-      registeredAt: new Date(),
-      daysSinceRegistered: 0,
+      trustScore: result.score,
+      status: result.status,
+      verificationCount: result.verificationCount,
+      confirmedCount: result.confirmedCount,
+      disputedCount: result.disputedCount,
+      isStale: result.isStale,
+      registeredAt: result.registeredAt,
+      daysSinceRegistered: result.daysSinceRegistered,
     };
   }
 }

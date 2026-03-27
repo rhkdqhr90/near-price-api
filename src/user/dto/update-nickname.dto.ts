@@ -2,7 +2,9 @@ import { IsString, MinLength, MaxLength, Matches } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class UpdateNicknameDto {
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : String(value),
+  )
   @IsString()
   @MinLength(2)
   @MaxLength(6)

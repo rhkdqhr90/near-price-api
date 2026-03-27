@@ -35,6 +35,12 @@ export class ProductController {
     return await this.productService.create(createProductDto);
   }
 
+  // GET /product/popular-tags — 인기 검색 태그 (price 등록 빈도 기반)
+  @Get('popular-tags')
+  async popularTags(): Promise<string[]> {
+    return await this.productService.findPopularTags();
+  }
+
   // GET /product/search?q=keyword — ES 검색 (반드시 :id 라우터보다 위에 위치)
   @Get('search')
   async search(
@@ -59,7 +65,9 @@ export class ProductController {
   }
 
   @Get(':id')
-  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<ProductResponseDto> {
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<ProductResponseDto> {
     return await this.productService.findOne(id);
   }
 

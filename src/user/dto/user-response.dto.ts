@@ -7,6 +7,8 @@ export class UserResponseDto {
   latitude: number | null;
   longitude: number | null;
   trustScore: number;
+  notifPriceChange: boolean;
+  notifPromotion: boolean;
   createdAt: Date;
   updatedAt: Date;
 
@@ -18,6 +20,8 @@ export class UserResponseDto {
     dto.latitude = user.latitude;
     dto.longitude = user.longitude;
     dto.trustScore = user.trustScore;
+    dto.notifPriceChange = user.notifPriceChange;
+    dto.notifPromotion = user.notifPromotion;
     dto.createdAt = user.createdAt;
     dto.updatedAt = user.updatedAt;
     return dto;

@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
@@ -11,6 +12,8 @@ import { User } from '../../user/entities/user.entity';
 import { Store } from '../../store/entities/store.entity';
 import { Product } from '../../product/entities/product.entity';
 
+// 상품별 활성 가격 조회 (product_id + isActive 필터링 후 price ASC 정렬)
+@Index(['product', 'isActive', 'price'])
 @Entity('prices')
 export class Price {
   @PrimaryGeneratedColumn('uuid')

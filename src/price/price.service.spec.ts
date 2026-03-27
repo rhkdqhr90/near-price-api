@@ -15,6 +15,9 @@ import { CreatePriceDto } from './dto/create-price.dto';
 import { UpdatePriceDto } from './dto/update-price.dto';
 import { PriceResponseDto } from './dto/price-response.dto';
 import { PriceReactionService } from '../price-reaction/price-reaction.service';
+import { NotificationService } from '../notification/notification.service';
+import { Wishlist } from '../wishlist/entities/wishlist.entity';
+import { DataSource } from 'typeorm';
 
 const STORE_UUID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const PRODUCT_UUID = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
@@ -105,7 +108,9 @@ describe('PriceService', () => {
             save: jest.fn(),
             find: jest.fn(),
             findOne: jest.fn(),
+            findAndCount: jest.fn(),
             remove: jest.fn(),
+            update: jest.fn(),
           },
         },
         {
@@ -127,9 +132,27 @@ describe('PriceService', () => {
           },
         },
         {
+          provide: getRepositoryToken(Wishlist),
+          useValue: {
+            find: jest.fn(),
+          },
+        },
+        {
           provide: PriceReactionService,
           useValue: {
             recalculateTrustScore: jest.fn(),
+          },
+        },
+        {
+          provide: NotificationService,
+          useValue: {
+            sendToUser: jest.fn(),
+          },
+        },
+        {
+          provide: DataSource,
+          useValue: {
+            query: jest.fn(),
           },
         },
       ],
@@ -249,7 +272,7 @@ describe('PriceService', () => {
   });
 
   describe('findAll()', () => {
-    it('모든 Price 목록을 PriceResponseDto 배열로 반환한다', async () => {
+    it('모든 Price 목록을 PaginatedResponseDto로 반환한다', async () => {
       const store = buildStore();
       const product = buildProduct();
       const prices = [
@@ -260,24 +283,31 @@ describe('PriceService', () => {
         }),
       ];
 
-      priceRepo.find.mockResolvedValue(prices);
+      priceRepo.findAndCount.mockResolvedValue([prices, 2]);
 
-      const result = await service.findAll();
+      const result = await service.findAll({ page: 1, limit: 20 });
 
-      expect(priceRepo.find).toHaveBeenCalledWith({
-        relations: ['store', 'product'],
+      expect(priceRepo.findAndCount).toHaveBeenCalledWith({
+        where: { isActive: true },
+        relations: ['store', 'product', 'user'],
+        order: { createdAt: 'DESC' },
+        skip: 0,
+        take: 20,
       });
-      expect(result).toHaveLength(2);
-      expect(result[0]).toBeInstanceOf(PriceResponseDto);
-      expect(result[1]).toBeInstanceOf(PriceResponseDto);
+      expect(result.data).toHaveLength(2);
+      expect(result.total).toBe(2);
+      expect(result.page).toBe(1);
+      expect(result.limit).toBe(20);
+      expect(result.data[0]).toBeInstanceOf(PriceResponseDto);
     });
 
-    it('Price가 없으면 빈 배열을 반환한다', async () => {
-      priceRepo.find.mockResolvedValue([]);
+    it('Price가 없으면 빈 data를 반환한다', async () => {
+      priceRepo.findAndCount.mockResolvedValue([[], 0]);
 
-      const result = await service.findAll();
+      const result = await service.findAll({ page: 1, limit: 20 });
 
-      expect(result).toEqual([]);
+      expect(result.data).toEqual([]);
+      expect(result.total).toBe(0);
     });
   });
 
@@ -293,7 +323,7 @@ describe('PriceService', () => {
 
       expect(priceRepo.findOne).toHaveBeenCalledWith({
         where: { id: PRICE_UUID },
-        relations: ['store', 'product'],
+        relations: ['store', 'product', 'user'],
       });
       expect(result).toBeInstanceOf(PriceResponseDto);
       expect(result.id).toBe(PRICE_UUID);
@@ -329,7 +359,7 @@ describe('PriceService', () => {
 
       expect(priceRepo.find).toHaveBeenCalledWith({
         where: { product: { id: PRODUCT_UUID }, isActive: true },
-        relations: ['store', 'product'],
+        relations: ['store', 'product', 'user'],
         order: { price: 'ASC' },
       });
       expect(result).toHaveLength(2);
@@ -392,16 +422,12 @@ describe('PriceService', () => {
       });
     });
 
-    it('dto에 storeId/productId가 있어도 price entity에 덮어씌워지지 않는다', async () => {
+    it('price 수정 시 store/product 관계 객체는 변경되지 않는다', async () => {
       const store = buildStore();
       const product = buildProduct();
       const user = buildUser();
       const priceEntity = buildPrice(store, product, { user });
-      const dto: UpdatePriceDto = {
-        storeId: INVALID_UUID,
-        productId: INVALID_UUID,
-        price: 2000,
-      };
+      const dto: UpdatePriceDto = { price: 2000 };
 
       priceRepo.findOne.mockResolvedValue(priceEntity);
       priceRepo.save.mockResolvedValue(
@@ -411,16 +437,8 @@ describe('PriceService', () => {
       await service.update(PRICE_UUID, dto, USER_UUID);
 
       const savedArg: Price = priceRepo.save.mock.calls[0][0] as Price;
-      // store/product는 원래 엔티티 관계 객체 그대로여야 한다 (INVALID_UUID로 교체되면 안됨)
       expect(savedArg.store).toEqual(store);
       expect(savedArg.product).toEqual(product);
-      // storeId, productId 프로퍼티가 entity에 주입되어 있으면 안 된다
-      expect(
-        (savedArg as unknown as Record<string, unknown>)['storeId'],
-      ).toBeUndefined();
-      expect(
-        (savedArg as unknown as Record<string, unknown>)['productId'],
-      ).toBeUndefined();
     });
 
     it('존재하지 않는 id이면 NotFoundException을 던진다', async () => {

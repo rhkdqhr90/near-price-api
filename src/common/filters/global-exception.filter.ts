@@ -6,6 +6,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Response } from 'express';
+import * as Sentry from '@sentry/nestjs';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -19,15 +20,20 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       const exceptionResponse = exception.getResponse();
 
       // HttpException 응답에서 민감한 정보 필터링
-      let responseBody: any = exceptionResponse;
+      let responseBody: unknown = exceptionResponse;
       if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
         responseBody = { ...exceptionResponse };
         // 프로덕션 환경에서는 message만 유지하고 불필요한 정보 제거
         if (isProduction) {
-          const { statusCode, message, error } = responseBody as any;
+          const body = exceptionResponse as {
+            statusCode?: number;
+            message?: unknown;
+            error?: string;
+          };
           responseBody = {
-            statusCode,
-            message: message || error || '요청 처리 중 오류가 발생했습니다.',
+            statusCode: body.statusCode,
+            message:
+              body.message ?? body.error ?? '요청 처리 중 오류가 발생했습니다.',
             timestamp: new Date().toISOString(),
           };
         }
@@ -36,7 +42,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       return response.status(status).json(responseBody);
     }
 
-    // 예상치 못한 에러는 500으로 처리
+    // 예상치 못한 에러는 500으로 처리 + Sentry 보고
+    if (process.env.SENTRY_DSN) {
+      Sentry.captureException(exception);
+    }
     const status = HttpStatus.INTERNAL_SERVER_ERROR;
 
     const errorResponse = {

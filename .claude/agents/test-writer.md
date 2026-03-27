@@ -7,12 +7,6 @@ model: sonnet
 
 You are a test specialist for the NearPrice NestJS backend.
 
-## 프로젝트 컨텍스트
-- NestJS + TypeORM + PostgreSQL
-- Price가 중심 엔티티 (User, Store, Product 연결)
-- trustScore: int default 0
-- 좌표: decimal → parseFloat transformer
-- 카카오 OAuth 인증
 
 ## 테스트 작성 원칙
 1. Service 레이어 단위 테스트 우선 — 모든 public 메서드 커버
@@ -97,11 +91,6 @@ describe('PriceService', () => {
 - 0원 가격 → 유효성 검증 확인
 - 날짜 변환: @Type(() => Date) 확인
 
-#### 신뢰도 시스템 (NEW)
-- PriceVerification: 본인이 등록한 가격 검증 시도 → ForbiddenException
-- PriceVerification: 중복 검증 시도 (ConflictException)
-- TrustScore: 자동 계산 정확성 (수식 검증)
-- Badge: 신뢰도 변경 시 배지 업데이트 확인
 
 #### 비동기 에러
 - findOne 실패 시 NotFoundException 캐치

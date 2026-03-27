@@ -9,7 +9,6 @@ import {
   Post,
   Query,
   UseGuards,
-  UseInterceptors,
 } from '@nestjs/common';
 import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -21,6 +20,8 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateNicknameDto } from './dto/update-nickname.dto';
 import { CheckNicknameDto } from './dto/check-nickname.dto';
+import { UpdateNotificationSettingsDto } from './dto/update-notification-settings.dto';
+import { PaginationDto } from '../common/dto/pagination.dto';
 
 @Controller('user')
 export class UserController {
@@ -34,13 +35,15 @@ export class UserController {
 
   @Get()
   @UseGuards(JwtAuthGuard, AdminGuard)
-  async findAll() {
-    return await this.userService.findAll();
+  async findAll(@Query() pagination: PaginationDto) {
+    return await this.userService.findAll(pagination);
   }
 
   @Get('check-nickname')
   @Throttle({ default: { limit: 20, ttl: 60000 } }) // 1분에 20회로 제한 (사용자 열거 공격 방지)
-  async checkNickname(@Query('nickname') nickname: string): Promise<CheckNicknameDto> {
+  async checkNickname(
+    @Query('nickname') nickname: string,
+  ): Promise<CheckNicknameDto> {
     const available = await this.userService.checkNicknameAvailable(nickname);
     return { available };
   }
@@ -75,7 +78,11 @@ export class UserController {
     @Body() updateNicknameDto: UpdateNicknameDto,
     @CurrentUser() requestUser: AuthUser,
   ) {
-    return await this.userService.updateNickname(id, updateNicknameDto.nickname, requestUser);
+    return await this.userService.updateNickname(
+      id,
+      updateNicknameDto.nickname,
+      requestUser,
+    );
   }
 
   @Patch(':id/fcm-token')
@@ -85,7 +92,25 @@ export class UserController {
     @Body() body: { fcmToken: string },
     @CurrentUser() requestUser: AuthUser,
   ) {
-    return await this.userService.updateFcmToken(id, body.fcmToken, requestUser);
+    return await this.userService.updateFcmToken(
+      id,
+      body.fcmToken,
+      requestUser,
+    );
+  }
+
+  @Patch(':id/notification-settings')
+  @UseGuards(JwtAuthGuard)
+  async updateNotificationSettings(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateNotificationSettingsDto,
+    @CurrentUser() requestUser: AuthUser,
+  ) {
+    return await this.userService.updateNotificationSettings(
+      id,
+      dto,
+      requestUser,
+    );
   }
 
   @Delete('me')

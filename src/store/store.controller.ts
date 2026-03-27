@@ -17,6 +17,7 @@ import { StoreService } from './store.service';
 import { CreateStoreDto } from './dto/create-store.dto';
 import { UpdateStoreDto } from './dto/update-store.dto';
 import { NearbyStoreQueryDto } from './dto/nearby-store.dto';
+import { PaginationDto } from '../common/dto/pagination.dto';
 
 @Controller('store')
 export class StoreController {
@@ -29,14 +30,15 @@ export class StoreController {
   }
 
   @Get()
-  async findAll() {
-    return await this.storeService.findAll();
+  async findAll(@Query() pagination: PaginationDto) {
+    return await this.storeService.findAll(pagination);
   }
 
   @Get('search')
   async searchByName(@Query('name') name: string) {
     if (!name || name.trim().length < 1) return [];
-    if (name.length > 100) throw new BadRequestException('검색어는 100자 이하여야 합니다.');
+    if (name.length > 100)
+      throw new BadRequestException('검색어는 100자 이하여야 합니다.');
     return await this.storeService.searchByName(name.trim());
   }
 
@@ -46,9 +48,7 @@ export class StoreController {
   }
 
   @Get('by-external/:externalPlaceId')
-  async findByExternal(
-    @Param('externalPlaceId') externalPlaceId: string,
-  ) {
+  async findByExternal(@Param('externalPlaceId') externalPlaceId: string) {
     // externalPlaceId 길이 검증 (SQL Injection 방지)
     if (!externalPlaceId || externalPlaceId.length > 200) {
       throw new BadRequestException('Invalid externalPlaceId format');

@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { BadgeCategory } from '../entities/badge-definition.entity';
 import { User } from '../../user/entities/user.entity';
-import { Price } from '../../price/entities/price.entity';
+import { PriceVerification } from '../../price-verification/entities/price-verification.entity';
 
 export interface BadgeEvaluationContext {
   totalRegistrations: number;
@@ -17,6 +17,8 @@ export class BadgeEvaluatorService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(PriceVerification)
+    private readonly priceVerificationRepository: Repository<PriceVerification>,
   ) {}
 
   /**
@@ -28,24 +30,51 @@ export class BadgeEvaluatorService {
       relations: ['prices'],
     });
     if (!user) {
-      return { earned: [], progress: [], definitions: this.getAllBadgeDefinitions() };
+      return { earned: [], progress: [] };
     }
+
+    const totalVerifications = await this.priceVerificationRepository.countBy({
+      verifier: { id: userId },
+    });
 
     const context: BadgeEvaluationContext = {
       totalRegistrations: user.prices?.length ?? 0,
-      totalVerifications: 0, // TODO: 검증 수 조회
+      totalVerifications,
       trustScore: user.trustScore ?? 0,
     };
 
     const earnedIds = this.evaluateEarnedBadges(context);
-    const earned = earnedIds.map(id => this.getBadgeDefinition(id)).filter(Boolean);
-    const progress = this.evaluateProgressBadges(context);
+    const earned = earnedIds
+      .map((id) => {
+        const def = this.getBadgeDefinition(id);
+        if (!def) return null;
+        return {
+          type: def.id,
+          name: def.name,
+          icon: def.icon,
+          category: def.category,
+        };
+      })
+      .filter(Boolean);
 
-    return {
-      earned,
-      progress,
-      definitions: this.getAllBadgeDefinitions(),
-    };
+    const progressRaw = this.evaluateProgressBadges(context);
+    const progress = progressRaw
+      .map((p) => {
+        const def = this.getBadgeDefinition(p.badgeId);
+        if (!def) return null;
+        return {
+          type: def.id,
+          name: def.name,
+          icon: def.icon,
+          category: def.category,
+          current: p.current,
+          threshold: p.threshold,
+          progressPercent: p.progressPercent,
+        };
+      })
+      .filter(Boolean);
+
+    return { earned, progress };
   }
   /**
    * 뱃지 정의 (마스터 데이터)

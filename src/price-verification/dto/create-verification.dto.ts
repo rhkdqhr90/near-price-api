@@ -1,7 +1,6 @@
 import {
   IsEnum,
   IsInt,
-  IsOptional,
   Min,
   Max,
   ValidateIf,
@@ -13,7 +12,10 @@ export class CreateVerificationDto {
   @IsEnum(VerificationResult)
   result: VerificationResult;
 
-  @ValidateIf((o) => o.result === VerificationResult.DISPUTED)
+  @ValidateIf(
+    (o: { result: VerificationResult }) =>
+      o.result === VerificationResult.DISPUTED,
+  )
   @IsNotEmpty()
   @IsInt()
   @Min(0)

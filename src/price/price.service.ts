@@ -5,14 +5,19 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Price } from './entities/price.entity';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { CreatePriceDto } from './dto/create-price.dto';
 import { PriceResponseDto } from './dto/price-response.dto';
 import { Store } from '../store/entities/store.entity';
 import { Product } from '../product/entities/product.entity';
 import { User } from '../user/entities/user.entity';
+import { Wishlist } from '../wishlist/entities/wishlist.entity';
 import { UpdatePriceDto } from './dto/update-price.dto';
 import { PriceReactionService } from '../price-reaction/price-reaction.service';
+import { NotificationService } from '../notification/notification.service';
+import { PaginationDto } from '../common/dto/pagination.dto';
+import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
+import { ProductPriceCardDto } from './dto/product-price-card.dto';
 
 @Injectable()
 export class PriceService {
@@ -29,7 +34,12 @@ export class PriceService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
 
+    @InjectRepository(Wishlist)
+    private readonly wishlistRepository: Repository<Wishlist>,
+
     private readonly priceReactionService: PriceReactionService,
+    private readonly notificationService: NotificationService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(
@@ -61,25 +71,174 @@ export class PriceService {
       user,
     });
     const saved = await this.priceRepository.save(price);
+
+    // 찜한 사용자들에게 알림 (비동기 fire-and-forget)
+    this.notifyWishlistUsers(
+      createPriceDto.productId,
+      product.name,
+      saved.price,
+      userId,
+    ).catch(() => undefined);
+
     return PriceResponseDto.from(saved);
   }
 
-  async findRecent(limit = 20): Promise<PriceResponseDto[]> {
-    const prices = await this.priceRepository.find({
+  private async notifyWishlistUsers(
+    productId: string,
+    productName: string,
+    price: number,
+    registeredByUserId: string,
+  ): Promise<void> {
+    const wishlists = await this.wishlistRepository.find({
+      where: { product: { id: productId } },
+      relations: ['user'],
+    });
+
+    await Promise.all(
+      wishlists
+        .filter(
+          (w) =>
+            w.user?.id !== registeredByUserId &&
+            w.user?.fcmToken != null &&
+            w.user?.notifPriceChange,
+        )
+        .map((w) =>
+          this.notificationService.sendToUser(
+            w.user.fcmToken!,
+            '찜한 상품 새 가격',
+            `"${productName}" 가격이 새로 등록됐어요: ${price.toLocaleString()}원`,
+          ),
+        ),
+    );
+  }
+
+  async findRecent(
+    pagination: PaginationDto,
+  ): Promise<PaginatedResponseDto<PriceResponseDto>> {
+    const { page, limit } = pagination;
+    const [prices, total] = await this.priceRepository.findAndCount({
       where: { isActive: true },
       relations: ['store', 'product', 'user'],
       order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
       take: limit,
     });
-    return prices.map((price) => PriceResponseDto.from(price));
+    return PaginatedResponseDto.of(
+      prices.map((price) => PriceResponseDto.from(price)),
+      total,
+      page,
+      limit,
+    );
   }
 
-  async findAll(): Promise<PriceResponseDto[]> {
-    const prices = await this.priceRepository.find({
+  async findRecentByProduct(
+    pagination: PaginationDto,
+  ): Promise<PaginatedResponseDto<ProductPriceCardDto>> {
+    const { page, limit } = pagination;
+
+    // 1. 고유 상품 수
+    const countRow = await this.priceRepository
+      .createQueryBuilder('p')
+      .select('COUNT(DISTINCT p.product_id)', 'cnt')
+      .where('p.is_active = true')
+      .getRawOne<{ cnt: string }>();
+    const total = parseInt(countRow?.cnt ?? '0', 10);
+
+    // 2. 상품별 최저가 row ID (DISTINCT ON)
+    const cheapestRows = await this.dataSource.query<{ id: string }[]>(
+      `SELECT DISTINCT ON (product_id) id
+       FROM prices
+       WHERE is_active = true
+       ORDER BY product_id, price ASC, created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, (page - 1) * limit],
+    );
+
+    if (cheapestRows.length === 0) {
+      return PaginatedResponseDto.of([], total, page, limit);
+    }
+
+    // 3. relations 로드
+    const ids = cheapestRows.map((r) => r.id);
+    const cheapestPrices = await this.priceRepository.find({
+      where: ids.map((id) => ({ id })),
       relations: ['store', 'product', 'user'],
-      take: 100,
     });
-    return prices.map((price) => PriceResponseDto.from(price));
+
+    // 4. 상품별 집계 (maxPrice, storeCount)
+    const productIds = cheapestPrices.map((p) => p.product.id);
+    const aggregates = await this.priceRepository
+      .createQueryBuilder('p')
+      .select('p.product_id', 'productId')
+      .addSelect('MAX(p.price)', 'maxPrice')
+      .addSelect('COUNT(DISTINCT p.store_id)', 'storeCount')
+      .where('p.product_id IN (:...productIds)', { productIds })
+      .andWhere('p.is_active = true')
+      .groupBy('p.product_id')
+      .getRawMany<{
+        productId: string;
+        maxPrice: string;
+        storeCount: string;
+      }>();
+
+    const aggMap = new Map(aggregates.map((a) => [a.productId, a]));
+
+    // 5. 최신순 정렬 후 DTO 조립
+    const sorted = cheapestPrices.sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+
+    const data: ProductPriceCardDto[] = sorted.map((p) => {
+      const agg = aggMap.get(p.product.id);
+      return {
+        productId: p.product.id,
+        productName: p.product.name,
+        unitType: p.product.unitType ?? null,
+        minPrice: p.price,
+        maxPrice: parseFloat(agg?.maxPrice ?? String(p.price)),
+        storeCount: parseInt(agg?.storeCount ?? '1', 10),
+        cheapestStore: p.store
+          ? {
+              id: p.store.id,
+              name: p.store.name,
+              latitude: p.store.latitude ?? null,
+              longitude: p.store.longitude ?? null,
+            }
+          : null,
+        imageUrl: p.imageUrl ?? null,
+        quantity: p.quantity != null ? String(p.quantity) : null,
+        hasClosingDiscount: p.condition?.includes('마감') ?? false,
+        createdAt: p.createdAt,
+        registrant: p.user
+          ? {
+              nickname: p.user.nickname,
+              profileImageUrl: p.user.profileImageUrl ?? null,
+            }
+          : null,
+      };
+    });
+
+    return PaginatedResponseDto.of(data, total, page, limit);
+  }
+
+  async findAll(
+    pagination: PaginationDto,
+  ): Promise<PaginatedResponseDto<PriceResponseDto>> {
+    const { page, limit } = pagination;
+    const [prices, total] = await this.priceRepository.findAndCount({
+      where: { isActive: true },
+      relations: ['store', 'product', 'user'],
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    return PaginatedResponseDto.of(
+      prices.map((price) => PriceResponseDto.from(price)),
+      total,
+      page,
+      limit,
+    );
   }
 
   async findOne(id: string): Promise<PriceResponseDto> {
@@ -93,13 +252,24 @@ export class PriceService {
     return PriceResponseDto.from(price);
   }
 
-  async findByUser(userId: string): Promise<PriceResponseDto[]> {
-    const prices = await this.priceRepository.find({
-      where: { user: { id: userId } },
+  async findByUser(
+    userId: string,
+    pagination: PaginationDto,
+  ): Promise<PaginatedResponseDto<PriceResponseDto>> {
+    const { page, limit } = pagination;
+    const [prices, total] = await this.priceRepository.findAndCount({
+      where: { user: { id: userId }, isActive: true },
       relations: ['store', 'product', 'user'],
       order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
     });
-    return prices.map((price) => PriceResponseDto.from(price));
+    return PaginatedResponseDto.of(
+      prices.map((price) => PriceResponseDto.from(price)),
+      total,
+      page,
+      limit,
+    );
   }
 
   async findByProduct(productId: string): Promise<PriceResponseDto[]> {
@@ -140,10 +310,7 @@ export class PriceService {
     if (price.user?.id !== userId) {
       throw new ForbiddenException('수정 권한이 없습니다.');
     }
-    const { storeId, productId, ...scalarFields } = updatePriceDto;
-    void storeId;
-    void productId;
-    Object.assign(price, scalarFields);
+    Object.assign(price, updatePriceDto);
     const saved = await this.priceRepository.save(price);
     return PriceResponseDto.from(saved);
   }

@@ -29,6 +29,8 @@ describe('AuthService', () => {
     nickname: '테스트유저',
     profileImageUrl: null,
     fcmToken: null,
+    notifPriceChange: true,
+    notifPromotion: false,
     nicknameChangedAt: null,
     latitude: null as unknown as number,
     longitude: null as unknown as number,
@@ -236,6 +238,7 @@ describe('AuthService', () => {
         expect(mockEmCreate).toHaveBeenCalledWith(User, {
           email: 'newuser@example.com',
           nickname: '신규유저',
+          profileImageUrl: null,
         });
         expect(mockEmSave).toHaveBeenCalledWith(newUser);
       });
@@ -375,6 +378,7 @@ describe('AuthService', () => {
         expect(mockEmCreate).toHaveBeenCalledWith(User, {
           email: 'kakao_55555@nearprice.app',
           nickname: '사용자_55555',
+          profileImageUrl: null,
         });
       });
 

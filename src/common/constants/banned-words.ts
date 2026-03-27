@@ -40,5 +40,7 @@ export const BANNED_WORDS = [
  */
 export function containsBannedWords(nickname: string): boolean {
   const lowerNickname = nickname.toLowerCase();
-  return BANNED_WORDS.some(word => lowerNickname.includes(word.toLowerCase()));
+  return BANNED_WORDS.some((word) =>
+    lowerNickname.includes(word.toLowerCase()),
+  );
 }

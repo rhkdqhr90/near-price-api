@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ILike, Repository } from 'typeorm';
+import { DataSource, ILike, Repository } from 'typeorm';
 import { Product } from './entities/product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductResponseDto } from './dto/product-response.dto';
@@ -14,6 +14,8 @@ export class ProductService {
     private readonly productRepository: Repository<Product>,
 
     private readonly productSearchService: ProductSearchService,
+
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(
@@ -83,5 +85,18 @@ export class ProductService {
   async syncSearch(): Promise<{ indexed: number }> {
     const indexed = await this.productSearchService.syncAllProducts();
     return { indexed };
+  }
+
+  async findPopularTags(limit = 6): Promise<string[]> {
+    const rows = await this.dataSource.query<Array<{ name: string }>>(
+      `SELECT p.name, COUNT(pr.id) AS price_count
+       FROM products p
+       INNER JOIN prices pr ON pr.product_id = p.id
+       GROUP BY p.id, p.name
+       ORDER BY price_count DESC
+       LIMIT $1`,
+      [limit],
+    );
+    return rows.map((r) => r.name);
   }
 }

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
@@ -32,6 +33,10 @@ import { UserBadge } from './badge/entities/user-badge.entity';
 import { HealthModule } from './health/health.module';
 import { InquiryModule } from './inquiry/inquiry.module';
 import { Inquiry } from './inquiry/entities/inquiry.entity';
+import { NotificationModule } from './notification/notification.module';
+import { FlyerModule } from './flyer/flyer.module';
+import { Flyer } from './flyer/entities/flyer.entity';
+import { OwnerPost } from './flyer/entities/owner-post.entity';
 
 @Module({
   imports: [
@@ -50,6 +55,7 @@ import { Inquiry } from './inquiry/entities/inquiry.entity';
         limit: 10, // 인증: 1분에 10요청
       },
     ]),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
@@ -74,6 +80,8 @@ import { Inquiry } from './inquiry/entities/inquiry.entity';
           BadgeDefinition,
           UserBadge,
           Inquiry,
+          Flyer,
+          OwnerPost,
         ],
         synchronize: configService.get('NODE_ENV') !== 'production',
       }),
@@ -94,6 +102,8 @@ import { Inquiry } from './inquiry/entities/inquiry.entity';
     BadgeModule,
     HealthModule,
     InquiryModule,
+    NotificationModule,
+    FlyerModule,
   ],
   providers: [
     {

@@ -3,6 +3,7 @@ export class UserDto {
   email: string;
   nickname: string;
   trustScore: number;
+  profileImageUrl: string | null;
 }
 
 export class AuthResponseDto {
