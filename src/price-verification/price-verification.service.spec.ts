@@ -21,6 +21,7 @@ function makeQbMock(manyAndCount: [PriceVerification[], number]) {
   const qb = {
     where: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
+    leftJoin: jest.fn().mockReturnThis(),
     leftJoinAndSelect: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(),
     skip: jest.fn().mockReturnThis(),
@@ -31,7 +32,13 @@ function makeQbMock(manyAndCount: [PriceVerification[], number]) {
 }
 
 // QueryRunner mock 헬퍼
-function makeQueryRunnerMock() {
+function makeQueryRunnerMock(existingVerification: PriceVerification | null = null) {
+  const innerQb = {
+    update: jest.fn().mockReturnThis(),
+    set: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    execute: jest.fn().mockResolvedValue(undefined),
+  };
   return {
     connect: jest.fn().mockResolvedValue(undefined),
     startTransaction: jest.fn().mockResolvedValue(undefined),
@@ -41,6 +48,8 @@ function makeQueryRunnerMock() {
     manager: {
       create: jest.fn(),
       save: jest.fn(),
+      findOne: jest.fn().mockResolvedValue(existingVerification),
+      createQueryBuilder: jest.fn().mockReturnValue(innerQb),
     },
   };
 }
@@ -193,11 +202,15 @@ describe('PriceVerificationService', () => {
 
     it('24시간 이내 중복 검증 → ForbiddenException', async () => {
       priceRepository.findOne.mockResolvedValue(mockPrice);
-      // 30분 전에 검증한 기록 존재
-      verificationRepository.findOne.mockResolvedValue({
+      userRepository.findOne.mockResolvedValue(mockVerifier);
+
+      // queryRunner.manager.findOne이 기존 검증 반환 (트랜잭션 내 중복 체크)
+      const existingVerification = {
         id: 'existing-v',
         createdAt: new Date(Date.now() - 30 * 60 * 1000),
-      } as PriceVerification);
+      } as PriceVerification;
+      const qr = makeQueryRunnerMock(existingVerification);
+      (dataSource.createQueryRunner as jest.Mock).mockReturnValue(qr);
 
       await expect(
         service.createVerification(PRICE_ID, VERIFIER_ID, {
@@ -208,19 +221,33 @@ describe('PriceVerificationService', () => {
 
     it('24시간 이내 중복 검증 확인 시 MoreThan(since24h) 조건으로 쿼리', async () => {
       priceRepository.findOne.mockResolvedValue(mockPrice);
-      verificationRepository.findOne.mockResolvedValue(null);
-      userRepository.findOne.mockResolvedValue(null); // 검증자 없음으로 조기 종료
+      userRepository.findOne.mockResolvedValue(mockVerifier);
+
+      // qr.manager.findOne이 null 반환 → 중복 없음으로 처리 후 새 검증 생성
+      const qr = makeQueryRunnerMock(null);
+      (dataSource.createQueryRunner as jest.Mock).mockReturnValue(qr);
+
+      const savedVerification: PriceVerification = {
+        id: 'new-v-uuid',
+        price: mockPrice,
+        verifier: mockVerifier,
+        result: VerificationResult.CONFIRMED,
+        actualPrice: null,
+        newPrice: null,
+        createdAt: new Date(),
+      };
+      qr.manager.create.mockReturnValue(savedVerification);
+      qr.manager.save.mockResolvedValue(savedVerification);
 
       const beforeCall = Date.now();
-      await expect(
-        service.createVerification(PRICE_ID, VERIFIER_ID, {
-          result: VerificationResult.CONFIRMED,
-        }),
-      ).rejects.toThrow(NotFoundException);
+      await service.createVerification(PRICE_ID, VERIFIER_ID, {
+        result: VerificationResult.CONFIRMED,
+      });
       const afterCall = Date.now();
 
-      // findOne이 호출되었고 where 조건에 MoreThan이 포함된 createdAt 조건이 있는지 확인
-      expect(verificationRepository.findOne).toHaveBeenCalledWith(
+      // queryRunner.manager.findOne이 호출되었고 where 조건에 MoreThan이 포함되는지 확인
+      expect(qr.manager.findOne).toHaveBeenCalledWith(
+        PriceVerification,
         expect.objectContaining({
           where: expect.objectContaining({
             price: { id: PRICE_ID },
@@ -231,7 +258,7 @@ describe('PriceVerificationService', () => {
       );
 
       // 전달된 createdAt 값이 24시간 이전 범위인지 검증
-      const callArgs = verificationRepository.findOne.mock.calls[0][0] as {
+      const callArgs = qr.manager.findOne.mock.calls[0][1] as {
         where: { createdAt: ReturnType<typeof MoreThan> };
       };
       const since24hValue = callArgs.where.createdAt
@@ -249,11 +276,10 @@ describe('PriceVerificationService', () => {
 
     it('25시간 전 검증은 중복으로 처리하지 않음 (24시간 외)', async () => {
       priceRepository.findOne.mockResolvedValue(mockPrice);
-      // verificationRepository.findOne이 null을 반환하면 중복 없음으로 처리
-      verificationRepository.findOne.mockResolvedValue(null);
       userRepository.findOne.mockResolvedValue(mockVerifier);
 
-      const qr = makeQueryRunnerMock();
+      // qr.manager.findOne이 null을 반환하면 중복 없음으로 처리
+      const qr = makeQueryRunnerMock(null);
       (dataSource.createQueryRunner as jest.Mock).mockReturnValue(qr);
 
       const savedVerification: PriceVerification = {
@@ -330,10 +356,9 @@ describe('PriceVerificationService', () => {
       expect(qr.release).toHaveBeenCalled();
     });
 
-    it('맞아요 검증 성공 → confirmedCount 증가', async () => {
+    it('맞아요 검증 성공 → confirmedCount atomic 증가 (QueryBuilder execute 호출)', async () => {
       const priceWithCounts = { ...mockPrice, confirmedCount: 2, verificationCount: 2 };
       priceRepository.findOne.mockResolvedValue(priceWithCounts);
-      verificationRepository.findOne.mockResolvedValue(null);
       userRepository.findOne.mockResolvedValue(mockVerifier);
 
       const qr = makeQueryRunnerMock();
@@ -355,15 +380,15 @@ describe('PriceVerificationService', () => {
         result: VerificationResult.CONFIRMED,
       });
 
-      // price 객체의 카운트가 증가했는지 확인
-      expect(priceWithCounts.confirmedCount).toBe(3);
-      expect(priceWithCounts.verificationCount).toBe(3);
+      // 서비스는 atomic increment (QueryBuilder.execute)를 사용하므로 qb.execute 호출을 검증
+      const innerQb = qr.manager.createQueryBuilder();
+      expect(qr.manager.createQueryBuilder).toHaveBeenCalled();
+      expect(innerQb.execute).toHaveBeenCalled();
     });
 
-    it('달라요 검증 성공 → disputedCount 증가', async () => {
+    it('달라요 검증 성공 → disputedCount atomic 증가 (QueryBuilder execute 호출)', async () => {
       const priceWithCounts = { ...mockPrice, disputedCount: 1, verificationCount: 1 };
       priceRepository.findOne.mockResolvedValue(priceWithCounts);
-      verificationRepository.findOne.mockResolvedValue(null);
       userRepository.findOne.mockResolvedValue(mockVerifier);
 
       const qr = makeQueryRunnerMock();
@@ -393,8 +418,10 @@ describe('PriceVerificationService', () => {
         actualPrice: 1500,
       });
 
-      expect(priceWithCounts.disputedCount).toBe(2);
-      expect(priceWithCounts.verificationCount).toBe(2);
+      // 서비스는 atomic increment (QueryBuilder.execute)를 사용하므로 qb.execute 호출을 검증
+      const innerQb = qr.manager.createQueryBuilder();
+      expect(qr.manager.createQueryBuilder).toHaveBeenCalled();
+      expect(innerQb.execute).toHaveBeenCalled();
     });
 
     it('달라요 검증 성공 → 새 가격 데이터 생성', async () => {
@@ -811,7 +838,7 @@ describe('PriceVerificationService', () => {
 
       await service.getVerificationsByVerifier(VERIFIER_ID);
 
-      expect(qb.where).toHaveBeenCalledWith('v.verifier_id = :verifierId', {
+      expect(qb.where).toHaveBeenCalledWith('verifier.id = :verifierId', {
         verifierId: VERIFIER_ID,
       });
     });

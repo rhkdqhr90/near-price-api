@@ -23,12 +23,17 @@ export class NotificationService {
       const serviceAccount = JSON.parse(
         serviceAccountJson,
       ) as admin.ServiceAccount;
-      const app = admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-      });
+      // 기존 앱이 있으면 재사용, 없으면 새로 초기화 (테스트 환경에서의 중복 초기화 방지)
+      const existingApp = admin.apps.find((a) => a?.name === 'nearprice');
+      const app =
+        existingApp ??
+        admin.initializeApp(
+          { credential: admin.credential.cert(serviceAccount) },
+          'nearprice',
+        );
       this.messaging = admin.messaging(app);
-    } catch (error) {
-      this.logger.error('Failed to initialize Firebase Admin SDK', error);
+    } catch {
+      this.logger.error('Failed to initialize Firebase Admin SDK');
     }
   }
 
@@ -37,18 +42,15 @@ export class NotificationService {
     title: string,
     body: string,
   ): Promise<void> {
-    if (!this.messaging || !fcmToken) return;
+    if (!this.messaging || !fcmToken.trim()) return;
 
     try {
       await this.messaging.send({
         token: fcmToken,
         notification: { title, body },
       });
-    } catch (error) {
-      this.logger.warn(
-        `FCM send failed for token ${fcmToken.slice(0, 10)}...`,
-        error,
-      );
+    } catch {
+      this.logger.warn('FCM send failed');
     }
   }
 }

@@ -96,6 +96,7 @@ describe('PriceService', () => {
   let storeRepo: jest.Mocked<Repository<Store>>;
   let productRepo: jest.Mocked<Repository<Product>>;
   let userRepo: jest.Mocked<Repository<User>>;
+  let dataSource: jest.Mocked<DataSource>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -111,6 +112,7 @@ describe('PriceService', () => {
             findAndCount: jest.fn(),
             remove: jest.fn(),
             update: jest.fn(),
+            createQueryBuilder: jest.fn(),
           },
         },
         {
@@ -163,6 +165,7 @@ describe('PriceService', () => {
     storeRepo = module.get(getRepositoryToken(Store));
     productRepo = module.get(getRepositoryToken(Product));
     userRepo = module.get(getRepositoryToken(User));
+    dataSource = module.get(DataSource);
   });
 
   afterEach(() => {
@@ -342,7 +345,7 @@ describe('PriceService', () => {
   });
 
   describe('findByProduct()', () => {
-    it('productId에 해당하는 Price 목록을 ASC 순으로 반환한다', async () => {
+    it('productId에 해당하는 Price 목록을 ASC 순으로 페이지네이션하여 반환한다', async () => {
       const store = buildStore();
       const product = buildProduct();
       const prices = [
@@ -353,26 +356,32 @@ describe('PriceService', () => {
         }),
       ];
 
-      priceRepo.find.mockResolvedValue(prices);
+      priceRepo.findAndCount.mockResolvedValue([prices, 2]);
 
-      const result = await service.findByProduct(PRODUCT_UUID);
+      const pagination = { page: 1, limit: 20 };
+      const result = await service.findByProduct(PRODUCT_UUID, pagination);
 
-      expect(priceRepo.find).toHaveBeenCalledWith({
+      expect(priceRepo.findAndCount).toHaveBeenCalledWith({
         where: { product: { id: PRODUCT_UUID }, isActive: true },
         relations: ['store', 'product', 'user'],
         order: { price: 'ASC' },
+        skip: 0,
+        take: 20,
       });
-      expect(result).toHaveLength(2);
-      expect(result[0].price).toBe(900);
-      expect(result[1].price).toBe(1200);
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0].price).toBe(900);
+      expect(result.data[1].price).toBe(1200);
+      expect(result.total).toBe(2);
     });
 
-    it('해당 상품의 Price가 없으면 빈 배열을 반환한다', async () => {
-      priceRepo.find.mockResolvedValue([]);
+    it('해당 상품의 Price가 없으면 빈 data 배열을 반환한다', async () => {
+      priceRepo.findAndCount.mockResolvedValue([[], 0]);
 
-      const result = await service.findByProduct(INVALID_UUID);
+      const pagination = { page: 1, limit: 20 };
+      const result = await service.findByProduct(INVALID_UUID, pagination);
 
-      expect(result).toEqual([]);
+      expect(result.data).toEqual([]);
+      expect(result.total).toBe(0);
     });
   });
 
@@ -510,6 +519,281 @@ describe('PriceService', () => {
         ForbiddenException,
       );
       expect(priceRepo.remove).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── findRecentByProduct() ─────────────────────────────────────────────────
+
+  describe('findRecentByProduct()', () => {
+    function makeQbMock(rawOne?: { cnt: string }) {
+      return {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue(rawOne ?? { cnt: '0' }),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      };
+    }
+
+    it('활성 가격이 없으면 빈 data 배열과 total 0을 반환한다', async () => {
+      const qb1 = makeQbMock({ cnt: '0' });
+      (priceRepo.createQueryBuilder as jest.Mock).mockReturnValueOnce(qb1);
+      (dataSource.query as jest.Mock).mockResolvedValue([]);
+
+      const result = await service.findRecentByProduct({ page: 1, limit: 10 });
+
+      expect(result.data).toEqual([]);
+      expect(result.total).toBe(0);
+      expect(result.page).toBe(1);
+    });
+
+    it('cheapestRows가 없으면 빈 data와 total을 반환한다', async () => {
+      const qb1 = makeQbMock({ cnt: '3' });
+      (priceRepo.createQueryBuilder as jest.Mock).mockReturnValueOnce(qb1);
+      (dataSource.query as jest.Mock).mockResolvedValue([]);
+
+      const result = await service.findRecentByProduct({ page: 1, limit: 10 });
+
+      expect(result.data).toEqual([]);
+      expect(result.total).toBe(3);
+    });
+
+    it('cheapestRows가 있으면 ProductPriceCardDto 배열을 반환한다', async () => {
+      const store = buildStore();
+      const product = buildProduct();
+      const user = buildUser();
+      const priceEntity = buildPrice(store, product, {
+        user,
+        price: 1000,
+        createdAt: new Date('2025-06-01'),
+        imageUrl: null as unknown as string,
+        condition: null,
+        quantity: null,
+      });
+
+      // 1st qb: COUNT DISTINCT (count query)
+      const qb1 = makeQbMock({ cnt: '1' });
+      // 2nd qb: aggregates (getRawMany)
+      const qb2 = makeQbMock();
+      (qb2.getRawMany as jest.Mock).mockResolvedValue([
+        { productId: PRODUCT_UUID, maxPrice: '1500', storeCount: '2' },
+      ]);
+
+      (priceRepo.createQueryBuilder as jest.Mock)
+        .mockReturnValueOnce(qb1)
+        .mockReturnValueOnce(qb2);
+
+      (dataSource.query as jest.Mock).mockResolvedValue([{ id: PRICE_UUID }]);
+      (priceRepo.find as jest.Mock).mockResolvedValue([priceEntity]);
+
+      const result = await service.findRecentByProduct({ page: 1, limit: 10 });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.total).toBe(1);
+      const card = result.data[0];
+      expect(card.productId).toBe(PRODUCT_UUID);
+      expect(card.productName).toBe('신라면');
+      expect(card.minPrice).toBe(1000);
+      expect(card.maxPrice).toBe(1500);
+      expect(card.storeCount).toBe(2);
+      expect(card.cheapestStore).not.toBeNull();
+      expect(card.cheapestStore?.id).toBe(STORE_UUID);
+    });
+
+    it('hasClosingDiscount는 condition에 "마감"이 포함될 때 true다', async () => {
+      const store = buildStore();
+      const product = buildProduct();
+      const user = buildUser();
+      const priceEntity = buildPrice(store, product, {
+        user,
+        price: 800,
+        condition: '마감 특가',
+        imageUrl: null as unknown as string,
+        quantity: null,
+      });
+
+      const qb1 = makeQbMock({ cnt: '1' });
+      const qb2 = makeQbMock();
+      (qb2.getRawMany as jest.Mock).mockResolvedValue([
+        { productId: PRODUCT_UUID, maxPrice: '800', storeCount: '1' },
+      ]);
+
+      (priceRepo.createQueryBuilder as jest.Mock)
+        .mockReturnValueOnce(qb1)
+        .mockReturnValueOnce(qb2);
+      (dataSource.query as jest.Mock).mockResolvedValue([{ id: PRICE_UUID }]);
+      (priceRepo.find as jest.Mock).mockResolvedValue([priceEntity]);
+
+      const result = await service.findRecentByProduct({ page: 1, limit: 10 });
+
+      expect(result.data[0].hasClosingDiscount).toBe(true);
+    });
+
+    it('condition이 null이면 hasClosingDiscount는 false다', async () => {
+      const store = buildStore();
+      const product = buildProduct();
+      const user = buildUser();
+      const priceEntity = buildPrice(store, product, {
+        user,
+        price: 800,
+        condition: null,
+        imageUrl: null as unknown as string,
+        quantity: null,
+      });
+
+      const qb1 = makeQbMock({ cnt: '1' });
+      const qb2 = makeQbMock();
+      (qb2.getRawMany as jest.Mock).mockResolvedValue([
+        { productId: PRODUCT_UUID, maxPrice: '800', storeCount: '1' },
+      ]);
+
+      (priceRepo.createQueryBuilder as jest.Mock)
+        .mockReturnValueOnce(qb1)
+        .mockReturnValueOnce(qb2);
+      (dataSource.query as jest.Mock).mockResolvedValue([{ id: PRICE_UUID }]);
+      (priceRepo.find as jest.Mock).mockResolvedValue([priceEntity]);
+
+      const result = await service.findRecentByProduct({ page: 1, limit: 10 });
+
+      expect(result.data[0].hasClosingDiscount).toBe(false);
+    });
+
+    it('page 2 요청 시 OFFSET이 limit만큼 증가한다', async () => {
+      const qb1 = makeQbMock({ cnt: '20' });
+      (priceRepo.createQueryBuilder as jest.Mock).mockReturnValueOnce(qb1);
+      (dataSource.query as jest.Mock).mockResolvedValue([]);
+
+      await service.findRecentByProduct({ page: 2, limit: 10 });
+
+      expect(dataSource.query).toHaveBeenCalledWith(
+        expect.any(String),
+        [10, 10],
+      );
+    });
+
+    it('cnt가 undefined이면 total을 0으로 처리한다', async () => {
+      const qb1 = makeQbMock(undefined);
+      (priceRepo.createQueryBuilder as jest.Mock).mockReturnValueOnce(qb1);
+      (dataSource.query as jest.Mock).mockResolvedValue([]);
+
+      const result = await service.findRecentByProduct({ page: 1, limit: 10 });
+
+      expect(result.total).toBe(0);
+    });
+
+    it('aggregate 정보가 없으면 maxPrice는 minPrice, storeCount는 1이다', async () => {
+      const store = buildStore();
+      const product = buildProduct();
+      const user = buildUser();
+      const priceEntity = buildPrice(store, product, {
+        user,
+        price: 1200,
+        condition: null,
+        imageUrl: null as unknown as string,
+        quantity: null,
+      });
+
+      const qb1 = makeQbMock({ cnt: '1' });
+      const qb2 = makeQbMock();
+      (qb2.getRawMany as jest.Mock).mockResolvedValue([]); // no aggregate
+
+      (priceRepo.createQueryBuilder as jest.Mock)
+        .mockReturnValueOnce(qb1)
+        .mockReturnValueOnce(qb2);
+      (dataSource.query as jest.Mock).mockResolvedValue([{ id: PRICE_UUID }]);
+      (priceRepo.find as jest.Mock).mockResolvedValue([priceEntity]);
+
+      const result = await service.findRecentByProduct({ page: 1, limit: 10 });
+
+      expect(result.data[0].maxPrice).toBe(1200);
+      expect(result.data[0].storeCount).toBe(1);
+    });
+  });
+
+  // ── findByProductName() ───────────────────────────────────────────────────
+
+  describe('findByProductName()', () => {
+    function makeQbMockForName(prices: Price[]) {
+      return {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(prices),
+      };
+    }
+
+    it('검색어에 매칭되는 Price 목록을 PriceResponseDto 배열로 반환한다', async () => {
+      const store = buildStore();
+      const product = buildProduct();
+      const user = buildUser();
+      const prices = [
+        buildPrice(store, product, { user, price: 900 }),
+        buildPrice(store, product, {
+          user,
+          id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+          price: 1200,
+        }),
+      ];
+      const qb = makeQbMockForName(prices);
+      (priceRepo.createQueryBuilder as jest.Mock).mockReturnValue(qb);
+
+      const result = await service.findByProductName('신라면');
+
+      expect(priceRepo.createQueryBuilder).toHaveBeenCalledWith('price');
+      expect(qb.leftJoinAndSelect).toHaveBeenCalledWith('price.store', 'store');
+      expect(qb.leftJoinAndSelect).toHaveBeenCalledWith(
+        'price.product',
+        'product',
+      );
+      expect(qb.leftJoinAndSelect).toHaveBeenCalledWith('price.user', 'user');
+      expect(qb.where).toHaveBeenCalledWith(
+        'LOWER(TRIM(product.name)) LIKE LOWER(:pattern)',
+        { pattern: '%신라면%' },
+      );
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        'price.isActive = :isActive',
+        { isActive: true },
+      );
+      expect(qb.orderBy).toHaveBeenCalledWith('price.price', 'ASC');
+      expect(result).toHaveLength(2);
+      expect(result[0]).toBeInstanceOf(PriceResponseDto);
+    });
+
+    it('매칭되는 가격이 없으면 빈 배열을 반환한다', async () => {
+      const qb = makeQbMockForName([]);
+      (priceRepo.createQueryBuilder as jest.Mock).mockReturnValue(qb);
+
+      const result = await service.findByProductName('없는상품');
+
+      expect(result).toEqual([]);
+    });
+
+    it('검색어의 앞뒤 공백을 trim하여 LIKE 패턴을 생성한다', async () => {
+      const qb = makeQbMockForName([]);
+      (priceRepo.createQueryBuilder as jest.Mock).mockReturnValue(qb);
+
+      await service.findByProductName('  신라면  ');
+
+      expect(qb.where).toHaveBeenCalledWith(
+        'LOWER(TRIM(product.name)) LIKE LOWER(:pattern)',
+        { pattern: '%신라면%' },
+      );
+    });
+
+    it('반환된 배열의 모든 항목이 PriceResponseDto 인스턴스다', async () => {
+      const store = buildStore();
+      const product = buildProduct();
+      const user = buildUser();
+      const priceEntity = buildPrice(store, product, { user });
+      const qb = makeQbMockForName([priceEntity]);
+      (priceRepo.createQueryBuilder as jest.Mock).mockReturnValue(qb);
+
+      const result = await service.findByProductName('신라면');
+
+      result.forEach((item) => expect(item).toBeInstanceOf(PriceResponseDto));
     });
   });
 });

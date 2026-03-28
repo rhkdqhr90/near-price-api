@@ -45,6 +45,7 @@ export class PriceController {
     return await this.priceService.findByUser(user.userId, pagination);
   }
 
+  // public endpoint — 비로그인 사용자도 가격 조회 가능 (앱 핵심 기능)
   @Get('recent')
   async findRecent(
     @Query() pagination: PaginationDto,
@@ -52,13 +53,16 @@ export class PriceController {
     return await this.priceService.findRecentByProduct(pagination);
   }
 
+  // public endpoint — 비로그인 사용자도 가격 조회 가능
   @Get('product/:productId')
   async findByProduct(
     @Param('productId', ParseUUIDPipe) productId: string,
-  ): Promise<PriceResponseDto[]> {
-    return await this.priceService.findByProduct(productId);
+    @Query() pagination: PaginationDto,
+  ): Promise<PaginatedResponseDto<PriceResponseDto>> {
+    return await this.priceService.findByProduct(productId, pagination);
   }
 
+  // public endpoint — 비로그인 사용자도 가격 조회 가능
   @Get('by-name')
   async findByProductName(
     @Query() dto: SearchPriceByNameDto,
@@ -66,6 +70,7 @@ export class PriceController {
     return await this.priceService.findByProductName(dto.name);
   }
 
+  // public endpoint — 비로그인 사용자도 가격 조회 가능
   @Get()
   async findAll(
     @Query() pagination: PaginationDto,
@@ -73,6 +78,7 @@ export class PriceController {
     return await this.priceService.findAll(pagination);
   }
 
+  // public endpoint — 비로그인 사용자도 가격 상세 조회 가능
   @Get(':id')
   async findOne(
     @Param('id', ParseUUIDPipe) id: string,

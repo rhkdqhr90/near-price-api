@@ -142,7 +142,7 @@ describe('UserService', () => {
       expect(userRepo.create).toHaveBeenCalledWith(dto);
       expect(userRepo.save).toHaveBeenCalledWith(user);
       expect(result).toBeInstanceOf(UserResponseDto);
-      expect(result.email).toBe(dto.email);
+      expect(result.nickname).toBe(dto.nickname);
     });
   });
 

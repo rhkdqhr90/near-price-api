@@ -1,4 +1,5 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { NaverService } from './naver.service';
 import { NaverGeocodeQueryDto } from './dto/naver-geocode-query.dto';
@@ -8,7 +9,7 @@ import { KakaoReverseGeocodeQueryDto } from './dto/kakao-reverse-geocode-query.d
 import { VworldGeocodeQueryDto } from './dto/vworld-geocode-query.dto';
 
 @Controller('naver')
-@UseGuards(JwtAuthGuard)
+@Throttle({ default: { limit: 20, ttl: 60000 } })
 export class NaverController {
   constructor(private readonly naverService: NaverService) {}
 
@@ -26,6 +27,7 @@ export class NaverController {
     return await this.naverService.reverseGeocode(query.lat, query.lng);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get('search')
   async search(
     @Query() query: NaverSearchQueryDto,
@@ -37,6 +39,8 @@ export class NaverController {
     );
   }
 
+  // @deprecated App에서 직접 사용하지 않음
+  @UseGuards(JwtAuthGuard)
   @Get('kakao-reverse-geocode')
   async kakaoReverseGeocode(
     @Query() query: KakaoReverseGeocodeQueryDto,

@@ -29,6 +29,14 @@ export class TrustScoreScheduler {
     private readonly priceTrustScoreCalculator: PriceTrustScoreCalculator,
   ) {}
 
+  private chunkArray<T>(arr: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) {
+      chunks.push(arr.slice(i, i + size));
+    }
+    return chunks;
+  }
+
   /**
    * 매일 새벽 3시 신뢰도 일괄 재계산
    * 순서: 가격 신뢰도 → 사용자 신뢰도 (가격 점수를 사용자 점수 계산에 활용)
@@ -76,6 +84,8 @@ export class TrustScoreScheduler {
       verificationsByPriceId.set(priceId, existing);
     }
 
+    const priceScoreUpdates: Array<{ id: string; trustScore: number }> = [];
+
     for (const price of prices) {
       const verifications = verificationsByPriceId.get(price.id) ?? [];
       const verificationData = verifications.map((v) => ({
@@ -87,10 +97,17 @@ export class TrustScoreScheduler {
           verificationData,
         );
       if (result.status === 'scored' && result.score !== null) {
-        await this.priceRepository.update(price.id, {
-          trustScore: result.score,
-        });
+        priceScoreUpdates.push({ id: price.id, trustScore: result.score });
       }
+    }
+
+    // 100개 청크씩 순차 처리 — DB 커넥션 풀 보호
+    for (const chunk of this.chunkArray(priceScoreUpdates, 100)) {
+      await Promise.all(
+        chunk.map(({ id, trustScore }) =>
+          this.priceRepository.update(id, { trustScore }),
+        ),
+      );
     }
     this.logger.log(`가격 신뢰도 재계산 완료: ${prices.length}건`);
   }
@@ -154,6 +171,7 @@ export class TrustScoreScheduler {
 
     const verificationsByUserId = new Map<string, PriceVerification[]>();
     for (const v of allRecentVerifications) {
+      if (!v.verifier) continue;
       const uid = v.verifier.id;
       const list = verificationsByUserId.get(uid) ?? [];
       list.push(v);
@@ -185,7 +203,7 @@ export class TrustScoreScheduler {
       for (const v of recentVerifications) {
         if (!v.price) continue;
         const isConfirmedMajority =
-          v.price.confirmedCount > v.price.disputedCount;
+          v.price.confirmedCount >= v.price.disputedCount;
         const userConfirmed = v.result === VerificationResult.CONFIRMED;
         if (isConfirmedMajority === userConfirmed) alignedCount++;
       }
@@ -246,15 +264,22 @@ export class TrustScoreScheduler {
       await this.userTrustScoreRepository.save(trustScoreInserts);
     }
 
-    // Bulk write: UserTrustScore update + User.trustScore update (병렬 실행)
-    await Promise.all([
-      ...trustScoreUpdates.map(({ id, data }) =>
-        this.userTrustScoreRepository.update(id, data),
+    // Bulk write: UserTrustScore update + User.trustScore update (100개 청크씩 순차 처리 — DB 커넥션 풀 보호)
+    const allUpdates = [
+      ...trustScoreUpdates.map(
+        ({ id, data }) =>
+          () =>
+            this.userTrustScoreRepository.update(id, data),
       ),
-      ...userScoreUpdates.map(({ id, trustScore }) =>
-        this.userRepository.update(id, { trustScore }),
+      ...userScoreUpdates.map(
+        ({ id, trustScore }) =>
+          () =>
+            this.userRepository.update(id, { trustScore }),
       ),
-    ]);
+    ];
+    for (const chunk of this.chunkArray(allUpdates, 100)) {
+      await Promise.all(chunk.map((fn) => fn()));
+    }
 
     this.logger.log(`사용자 신뢰도 재계산 완료: ${users.length}명`);
   }

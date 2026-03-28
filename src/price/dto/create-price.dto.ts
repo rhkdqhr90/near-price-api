@@ -7,10 +7,13 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
+import { IsSaleEndDateAfterStart } from './validators/sale-date.validator';
 
 export class CreatePriceDto {
   @IsUUID()
@@ -33,6 +36,7 @@ export class CreatePriceDto {
 
   @IsNotEmpty()
   @IsString()
+  @Matches(/^https?:\/\//, { message: 'imageUrl must be a valid HTTP(S) URL' })
   imageUrl: string;
 
   @IsOptional()
@@ -43,6 +47,8 @@ export class CreatePriceDto {
   @IsOptional()
   @IsDate()
   @Type(() => Date)
+  @ValidateIf((o: CreatePriceDto) => o.saleStartDate !== undefined)
+  @IsSaleEndDateAfterStart()
   saleEndDate?: Date;
 
   @IsOptional()

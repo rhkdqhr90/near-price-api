@@ -3,7 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -108,7 +108,7 @@ async function bootstrap() {
   await app.listen(port);
 
   if (process.env.NODE_ENV !== 'production') {
-    console.log(`NearPrice API listening on http://localhost:${port}`);
+    new Logger('Bootstrap').log(`NearPrice API listening on port ${port}`);
   }
 }
 void bootstrap();

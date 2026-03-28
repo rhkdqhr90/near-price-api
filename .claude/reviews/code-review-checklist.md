@@ -92,6 +92,22 @@
 
 ## 5. TypeORM / 성능 최적화
 
+### 컬럼 타입 명시 (실제 장애 사례)
+- [ ] `string | null` 유니온 타입 컬럼에 `type: 'varchar'` 명시?
+  ```typescript
+  // ❌ 타입 누락 → TypeORM이 "Object"로 추론 → 서버 시작 실패
+  @Column({ nullable: true })
+  condition: string | null;
+
+  // ✅ 올바름
+  @Column({ type: 'varchar', nullable: true })
+  condition: string | null;
+  ```
+  > **사유**: TypeORM은 `string | null` 유니온을 단일 원시 타입으로 추론하지 못해
+  > `DataTypeNotSupportedError: Data type "Object"` 에러를 던지고 DB 연결 자체가 실패한다.
+  > `nullable: true`만 쓸 때는 반드시 `type`을 함께 지정한다.
+- [ ] `number | null`, `boolean | null` 등 nullable 유니온에도 동일하게 `type` 명시?
+
 ### Decimal 컬럼 (좌표, 가격)
 - [ ] transformer 정확하게 적용?
   ```typescript

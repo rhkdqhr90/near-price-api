@@ -63,7 +63,7 @@ export class Price {
   saleEndDate: Date | null;
 
   // 제품 상태
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   condition: string | null;
 
   @Column({ default: true })

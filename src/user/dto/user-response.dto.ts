@@ -1,8 +1,8 @@
 import { User } from '../entities/user.entity';
 
+// Public profile DTO: 타인도 조회 가능하므로 민감 필드(email, fcmToken 등) 제외
 export class UserResponseDto {
   id: string;
-  email: string;
   nickname: string;
   latitude: number | null;
   longitude: number | null;
@@ -15,7 +15,6 @@ export class UserResponseDto {
   static from(user: User): UserResponseDto {
     const dto = new UserResponseDto();
     dto.id = user.id;
-    dto.email = user.email;
     dto.nickname = user.nickname;
     dto.latitude = user.latitude;
     dto.longitude = user.longitude;

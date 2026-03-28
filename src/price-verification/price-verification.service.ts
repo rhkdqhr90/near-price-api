@@ -52,7 +52,7 @@ export class PriceVerificationService {
     // 가격 데이터 조회
     const price = await this.priceRepository.findOne({
       where: { id: priceId },
-      relations: ['user'],
+      relations: ['user', 'product', 'store'],
     });
 
     if (!price) {
@@ -62,20 +62,6 @@ export class PriceVerificationService {
     // 본인이 등록한 가격은 검증할 수 없음
     if (price.user?.id === userId) {
       throw new ForbiddenException('본인이 등록한 가격은 검증할 수 없습니다');
-    }
-
-    // 24시간 내 중복 검증 확인
-    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const existingVerification = await this.verificationRepository.findOne({
-      where: {
-        price: { id: priceId },
-        verifier: { id: userId },
-        createdAt: MoreThan(since24h),
-      },
-    });
-
-    if (existingVerification) {
-      throw new ForbiddenException('24시간 이내에 이미 검증했습니다');
     }
 
     // 검증자 조회
@@ -103,6 +89,24 @@ export class PriceVerificationService {
     await queryRunner.startTransaction();
 
     try {
+      // 24시간 내 중복 검증 확인 (race condition 방지: SELECT FOR UPDATE)
+      const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const existingVerification = await queryRunner.manager.findOne(
+        PriceVerification,
+        {
+          where: {
+            price: { id: priceId },
+            verifier: { id: userId },
+            createdAt: MoreThan(since24h),
+          },
+          lock: { mode: 'pessimistic_write' },
+        },
+      );
+
+      if (existingVerification) {
+        throw new ForbiddenException('24시간 이내에 이미 검증했습니다');
+      }
+
       // 검증 생성
       const verification = queryRunner.manager.create(PriceVerification, {
         price,
@@ -137,14 +141,24 @@ export class PriceVerificationService {
         await queryRunner.manager.save(savedVerification);
       }
 
-      // 가격 데이터의 검증 카운트 업데이트
-      price.verificationCount = (price.verificationCount || 0) + 1;
-      if (createVerificationDto.result === VerificationResult.CONFIRMED) {
-        price.confirmedCount = (price.confirmedCount || 0) + 1;
-      } else {
-        price.disputedCount = (price.disputedCount || 0) + 1;
-      }
-      await queryRunner.manager.save(price);
+      // 가격 데이터의 검증 카운트 업데이트 (race condition 방지를 위한 atomic increment)
+      const countUpdate =
+        createVerificationDto.result === VerificationResult.CONFIRMED
+          ? {
+              verificationCount: () => 'verification_count + 1',
+              confirmedCount: () => 'confirmed_count + 1',
+            }
+          : {
+              verificationCount: () => 'verification_count + 1',
+              disputedCount: () => 'disputed_count + 1',
+            };
+
+      await queryRunner.manager
+        .createQueryBuilder()
+        .update(Price)
+        .set(countUpdate)
+        .where('id = :id', { id: price.id })
+        .execute();
 
       const result: VerificationResponseDto = {
         id: savedVerification.id,
@@ -235,9 +249,10 @@ export class PriceVerificationService {
 
     let query = this.verificationRepository
       .createQueryBuilder('v')
-      .where('v.price_id = :priceId', { priceId })
+      .leftJoin('v.price', 'price')
       .leftJoinAndSelect('v.verifier', 'verifier')
-      .orderBy('v.created_at', 'DESC');
+      .where('price.id = :priceId', { priceId })
+      .orderBy('v.createdAt', 'DESC');
 
     if (result) {
       query = query.andWhere('v.result = :result', { result });
@@ -300,11 +315,12 @@ export class PriceVerificationService {
   }> {
     const [verifications, total] = await this.verificationRepository
       .createQueryBuilder('v')
-      .where('v.verifier_id = :verifierId', { verifierId })
+      .leftJoin('v.verifier', 'verifier')
       .leftJoinAndSelect('v.price', 'price')
       .leftJoinAndSelect('price.product', 'product')
       .leftJoinAndSelect('price.store', 'store')
-      .orderBy('v.created_at', 'DESC')
+      .where('verifier.id = :verifierId', { verifierId })
+      .orderBy('v.createdAt', 'DESC')
       .skip((page - 1) * limit)
       .take(limit)
       .getManyAndCount();
@@ -380,7 +396,15 @@ export class PriceVerificationService {
   }
 
   /**
-   * 사용자 신뢰도 점수 재계산
+   * 사용자 신뢰도 점수 온디맨드 재계산 (간이 버전)
+   *
+   * 역할: 외부에서 특정 사용자의 신뢰도를 즉시 업데이트해야 할 때 사용.
+   * 알고리즘: 최근 90일 검증 중 CONFIRMED 비율 단순 계산.
+   *
+   * 주의: TrustScoreScheduler.recalculateAll() 과 역할이 다름.
+   * - 이 메서드: User.trustScore만 업데이트 (단순 비율)
+   * - 스케줄러 (매일 새벽 3시): registrationScore + verificationScore + activeDays
+   *   복합 계산 후 UserTrustScore 세부 통계까지 갱신하는 정식 재계산
    */
   async recalculateTrustScore(userId: string): Promise<void> {
     const since90d = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);

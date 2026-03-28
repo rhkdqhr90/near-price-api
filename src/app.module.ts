@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { createThrottlerConfig } from './config/throttler.config';
 import { UserModule } from './user/user.module';
 import { StoreModule } from './store/store.module';
 import { ProductModule } from './product/product.module';
@@ -44,18 +45,11 @@ import { NaverModule } from './naver/naver.module';
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    ThrottlerModule.forRoot([
-      {
-        name: 'default',
-        ttl: 60000, // 1분
-        limit: 100, // 기본: 1분에 100요청
-      },
-      {
-        name: 'auth',
-        ttl: 60000, // 1분
-        limit: 10, // 인증: 1분에 10요청
-      },
-    ]),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: createThrottlerConfig,
+    }),
     ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -84,7 +78,7 @@ import { NaverModule } from './naver/naver.module';
           Flyer,
           OwnerPost,
         ],
-        synchronize: configService.get('NODE_ENV') !== 'production',
+        synchronize: false,
       }),
       inject: [ConfigService],
     }),

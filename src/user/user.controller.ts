@@ -50,6 +50,7 @@ export class UserController {
     return { available };
   }
 
+  // Public profile: sensitive fields excluded (email, fcmToken)
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   async findOne(@Param('id', ParseUUIDPipe) id: string) {

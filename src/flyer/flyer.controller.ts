@@ -32,6 +32,12 @@ export class FlyerController {
     return await this.flyerService.findAllFlyers();
   }
 
+  // 주의: :id 보다 반드시 위에 위치해야 함 (라우트 충돌 방지)
+  @Get('owner-posts/list')
+  async findAllOwnerPosts(): Promise<OwnerPostResponseDto[]> {
+    return await this.flyerService.findAllOwnerPosts();
+  }
+
   @Get(':id')
   async findOne(
     @Param('id', ParseUUIDPipe) id: string,
@@ -62,11 +68,6 @@ export class FlyerController {
   }
 
   // ─── Owner Posts ──────────────────────────────────────────────────────────
-
-  @Get('owner-posts/list')
-  async findAllOwnerPosts(): Promise<OwnerPostResponseDto[]> {
-    return await this.flyerService.findAllOwnerPosts();
-  }
 
   @Post('owner-posts')
   @UseGuards(JwtAuthGuard, AdminGuard)

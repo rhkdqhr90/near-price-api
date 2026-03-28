@@ -2,10 +2,10 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
-  Unique,
 } from 'typeorm';
 import { Price } from '../../price/entities/price.entity';
 import { User } from '../../user/entities/user.entity';
@@ -16,7 +16,8 @@ export enum VerificationResult {
 }
 
 @Entity('price_verifications')
-@Unique(['price', 'verifier'])
+@Index(['price'])
+@Index(['verifier'])
 export class PriceVerification {
   @PrimaryGeneratedColumn('uuid')
   id: string;

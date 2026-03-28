@@ -1,11 +1,13 @@
 import {
   Controller,
+  Logger,
   Post,
   UploadedFile,
   UseGuards,
   UseInterceptors,
   BadRequestException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -18,6 +20,10 @@ const ALLOWED_EXTS = ['.jpg', '.jpeg', '.png', '.webp'] as const;
 @Controller('upload')
 @UseGuards(JwtAuthGuard)
 export class UploadController {
+  private readonly logger = new Logger(UploadController.name);
+
+  constructor(private readonly configService: ConfigService) {}
+
   @Post()
   @UseInterceptors(
     FileInterceptor('file', {
@@ -55,7 +61,14 @@ export class UploadController {
     if (!file) {
       throw new BadRequestException('파일이 없습니다.');
     }
-    const baseUrl = process.env.BASE_URL ?? 'http://localhost:3000';
-    return { url: `${baseUrl}/uploads/${file.filename}` };
+    const baseUrl = this.configService.get<string>('BASE_URL');
+    if (!baseUrl) {
+      this.logger.warn(
+        'BASE_URL 환경변수가 설정되지 않았습니다. 기본값(http://localhost:3000)을 사용합니다.',
+      );
+    }
+    return {
+      url: `${baseUrl ?? 'http://localhost:3000'}/uploads/${file.filename}`,
+    };
   }
 }

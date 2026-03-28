@@ -140,7 +140,7 @@ export class PriceService {
     const countRow = await this.priceRepository
       .createQueryBuilder('p')
       .select('COUNT(DISTINCT p.product_id)', 'cnt')
-      .where('p.is_active = true')
+      .where('p.isActive = true')
       .getRawOne<{ cnt: string }>();
     const total = parseInt(countRow?.cnt ?? '0', 10);
 
@@ -148,8 +148,8 @@ export class PriceService {
     const cheapestRows = await this.dataSource.query<{ id: string }[]>(
       `SELECT DISTINCT ON (product_id) id
        FROM prices
-       WHERE is_active = true
-       ORDER BY product_id, price ASC, created_at DESC
+       WHERE "isActive" = true
+       ORDER BY product_id, price ASC, "createdAt" DESC
        LIMIT $1 OFFSET $2`,
       [limit, (page - 1) * limit],
     );
@@ -173,7 +173,7 @@ export class PriceService {
       .addSelect('MAX(p.price)', 'maxPrice')
       .addSelect('COUNT(DISTINCT p.store_id)', 'storeCount')
       .where('p.product_id IN (:...productIds)', { productIds })
-      .andWhere('p.is_active = true')
+      .andWhere('p.isActive = true')
       .groupBy('p.product_id')
       .getRawMany<{
         productId: string;
@@ -272,13 +272,24 @@ export class PriceService {
     );
   }
 
-  async findByProduct(productId: string): Promise<PriceResponseDto[]> {
-    const prices = await this.priceRepository.find({
+  async findByProduct(
+    productId: string,
+    pagination: PaginationDto,
+  ): Promise<PaginatedResponseDto<PriceResponseDto>> {
+    const { page, limit } = pagination;
+    const [prices, total] = await this.priceRepository.findAndCount({
       where: { product: { id: productId }, isActive: true },
       relations: ['store', 'product', 'user'],
       order: { price: 'ASC' },
+      skip: (page - 1) * limit,
+      take: limit,
     });
-    return prices.map((price) => PriceResponseDto.from(price));
+    return PaginatedResponseDto.of(
+      prices.map((price) => PriceResponseDto.from(price)),
+      total,
+      page,
+      limit,
+    );
   }
 
   async findByProductName(productName: string): Promise<PriceResponseDto[]> {
@@ -288,7 +299,9 @@ export class PriceService {
       .leftJoinAndSelect('price.store', 'store')
       .leftJoinAndSelect('price.product', 'product')
       .leftJoinAndSelect('price.user', 'user')
-      .where('LOWER(TRIM(product.name)) = LOWER(:name)', { name: trimmed })
+      .where('LOWER(TRIM(product.name)) LIKE LOWER(:pattern)', {
+        pattern: `%${trimmed}%`,
+      })
       .andWhere('price.isActive = :isActive', { isActive: true })
       .orderBy('price.price', 'ASC')
       .getMany();
