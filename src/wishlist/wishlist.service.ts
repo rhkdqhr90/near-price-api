@@ -83,16 +83,13 @@ export class WishlistService {
       .leftJoinAndSelect(
         'product.prices',
         'price',
-        `price.id = (
-          SELECT p2.id FROM prices p2
-          WHERE p2.product_id = product.id
-          ORDER BY p2.price ASC
-          LIMIT 1
-        )`,
+        'price."isActive" = :isActive',
+        { isActive: true },
       )
       .leftJoinAndSelect('price.store', 'store')
       .where('user.id = :userId', { userId })
       .orderBy('w.createdAt', 'DESC')
+      .addOrderBy('price.price', 'ASC')
       .getMany();
 
     return WishlistResponseDto.from(wishlists);

@@ -183,7 +183,21 @@ export class PriceService {
 
     const aggMap = new Map(aggregates.map((a) => [a.productId, a]));
 
-    // 5. 최신순 정렬 후 DTO 조립
+    // 5. 가격별 맞아요(CONFIRM) 반응 수 집계
+    const verCounts = await this.dataSource.query<
+      { price_id: string; count: string }[]
+    >(
+      `SELECT price_id, COUNT(*) as count
+       FROM price_reactions
+       WHERE price_id = ANY($1) AND type = 'confirm'
+       GROUP BY price_id`,
+      [ids],
+    );
+    const verCountMap = new Map(
+      verCounts.map((v) => [v.price_id, parseInt(v.count, 10)]),
+    );
+
+    // 6. 최신순 정렬 후 DTO 조립
     const sorted = cheapestPrices.sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -209,6 +223,7 @@ export class PriceService {
         imageUrl: p.imageUrl ?? null,
         quantity: p.quantity != null ? String(p.quantity) : null,
         hasClosingDiscount: p.condition?.includes('마감') ?? false,
+        verificationCount: verCountMap.get(p.id) ?? 0,
         createdAt: p.createdAt,
         registrant: p.user
           ? {
@@ -281,6 +296,33 @@ export class PriceService {
       where: { product: { id: productId }, isActive: true },
       relations: ['store', 'product', 'user'],
       order: { price: 'ASC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    return PaginatedResponseDto.of(
+      prices.map((price) => PriceResponseDto.from(price)),
+      total,
+      page,
+      limit,
+    );
+  }
+
+  async findByStore(
+    storeId: string,
+    pagination: PaginationDto,
+  ): Promise<PaginatedResponseDto<PriceResponseDto>> {
+    const store = await this.storeRepository.findOne({
+      where: { id: storeId },
+    });
+    if (!store) {
+      throw new NotFoundException('존재하지 않는 매장입니다.');
+    }
+
+    const { page, limit } = pagination;
+    const [prices, total] = await this.priceRepository.findAndCount({
+      where: { store: { id: storeId }, isActive: true },
+      relations: ['store', 'product', 'user'],
+      order: { createdAt: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,
     });

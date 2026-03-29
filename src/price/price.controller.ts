@@ -78,6 +78,15 @@ export class PriceController {
     return await this.priceService.findAll(pagination);
   }
 
+  // public endpoint — 비로그인 사용자도 매장별 가격 조회 가능
+  @Get('store/:storeId')
+  async findByStore(
+    @Param('storeId', ParseUUIDPipe) storeId: string,
+    @Query() pagination: PaginationDto,
+  ): Promise<PaginatedResponseDto<PriceResponseDto>> {
+    return await this.priceService.findByStore(storeId, pagination);
+  }
+
   // public endpoint — 비로그인 사용자도 가격 상세 조회 가능
   @Get(':id')
   async findOne(

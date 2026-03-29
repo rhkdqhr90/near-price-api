@@ -38,6 +38,7 @@ import { NotificationModule } from './notification/notification.module';
 import { FlyerModule } from './flyer/flyer.module';
 import { Flyer } from './flyer/entities/flyer.entity';
 import { OwnerPost } from './flyer/entities/owner-post.entity';
+import { StoreReview } from './store/entities/store-review.entity';
 import { NaverModule } from './naver/naver.module';
 
 @Module({
@@ -77,6 +78,7 @@ import { NaverModule } from './naver/naver.module';
           Inquiry,
           Flyer,
           OwnerPost,
+          StoreReview,
         ],
         synchronize: false,
       }),

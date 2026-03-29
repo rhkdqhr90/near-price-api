@@ -1,7 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 import { Store } from './entities/store.entity';
+import { StoreReview } from './entities/store-review.entity';
+import { User } from '../user/entities/user.entity';
 import { CreateStoreDto } from './dto/create-store.dto';
 import { StoreResponseDto } from './dto/store-response.dto';
 import { UpdateStoreDto } from './dto/update-store.dto';
@@ -9,14 +15,23 @@ import {
   NearbyStoreQueryDto,
   NearbyStoreResponseDto,
 } from './dto/nearby-store.dto';
+import { CreateStoreReviewDto } from './dto/create-store-review.dto';
+import { StoreReviewResponseDto } from './dto/store-review-response.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
+import { DB_ERROR_CODES } from '../common/constants/db-error-codes';
 
 @Injectable()
 export class StoreService {
   constructor(
     @InjectRepository(Store)
     private readonly storeRepository: Repository<Store>,
+
+    @InjectRepository(StoreReview)
+    private readonly reviewRepository: Repository<StoreReview>,
+
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
   async create(createStore: CreateStoreDto): Promise<StoreResponseDto> {
@@ -146,5 +161,69 @@ export class StoreService {
       throw new NotFoundException('존재 하지 않는 마켓 입니다');
     }
     await this.storeRepository.remove(store);
+  }
+
+  async addReview(
+    storeId: string,
+    userId: string,
+    dto: CreateStoreReviewDto,
+  ): Promise<StoreReviewResponseDto> {
+    const [store, user] = await Promise.all([
+      this.storeRepository.findOne({ where: { id: storeId } }),
+      this.userRepository.findOne({ where: { id: userId } }),
+    ]);
+    if (!store) {
+      throw new NotFoundException('존재하지 않는 매장입니다.');
+    }
+    if (!user) {
+      throw new NotFoundException('존재하지 않는 사용자입니다.');
+    }
+
+    try {
+      const review = this.reviewRepository.create({
+        store,
+        user,
+        rating: dto.rating,
+        comment: dto.comment ?? null,
+      });
+      const saved = await this.reviewRepository.save(review);
+      return StoreReviewResponseDto.from(saved);
+    } catch (e) {
+      if (
+        e instanceof QueryFailedError &&
+        (e as QueryFailedError & { code: string }).code ===
+          DB_ERROR_CODES.UNIQUE_VIOLATION
+      ) {
+        throw new ConflictException('이미 리뷰를 작성했습니다.');
+      }
+      throw e;
+    }
+  }
+
+  async findReviews(
+    storeId: string,
+    pagination: PaginationDto,
+  ): Promise<PaginatedResponseDto<StoreReviewResponseDto>> {
+    const store = await this.storeRepository.findOne({
+      where: { id: storeId },
+    });
+    if (!store) {
+      throw new NotFoundException('존재하지 않는 매장입니다.');
+    }
+
+    const { page, limit } = pagination;
+    const [reviews, total] = await this.reviewRepository.findAndCount({
+      where: { store: { id: storeId } },
+      relations: ['user'],
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    return PaginatedResponseDto.of(
+      reviews.map((r) => StoreReviewResponseDto.from(r)),
+      total,
+      page,
+      limit,
+    );
   }
 }

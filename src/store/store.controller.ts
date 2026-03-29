@@ -13,11 +13,16 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthUser } from '../auth/types/auth-user.type';
 import { StoreService } from './store.service';
 import { CreateStoreDto } from './dto/create-store.dto';
 import { UpdateStoreDto } from './dto/update-store.dto';
 import { NearbyStoreQueryDto } from './dto/nearby-store.dto';
+import { CreateStoreReviewDto } from './dto/create-store-review.dto';
+import { StoreReviewResponseDto } from './dto/store-review-response.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 
 @Controller('store')
 export class StoreController {
@@ -59,6 +64,25 @@ export class StoreController {
   @Get(':id')
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return await this.storeService.findOne(id);
+  }
+
+  @Post(':id/reviews')
+  @UseGuards(JwtAuthGuard)
+  async addReview(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateStoreReviewDto,
+  ): Promise<StoreReviewResponseDto> {
+    return await this.storeService.addReview(id, user.userId, dto);
+  }
+
+  // public endpoint — 비로그인 사용자도 매장 리뷰 조회 가능
+  @Get(':id/reviews')
+  async findReviews(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() pagination: PaginationDto,
+  ): Promise<PaginatedResponseDto<StoreReviewResponseDto>> {
+    return await this.storeService.findReviews(id, pagination);
   }
 
   @Patch(':id')

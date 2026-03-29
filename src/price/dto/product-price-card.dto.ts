@@ -14,6 +14,7 @@ export class ProductPriceCardDto {
   imageUrl: string | null;
   quantity: string | null;
   hasClosingDiscount: boolean;
+  verificationCount: number;
   createdAt: Date;
   registrant: { nickname: string; profileImageUrl: string | null } | null;
 }
