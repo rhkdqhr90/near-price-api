@@ -12,6 +12,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { ProductService } from './product.service';
@@ -37,6 +38,7 @@ export class ProductController {
 
   // GET /product/popular-tags — 인기 검색 태그 (price 등록 빈도 기반)
   @Get('popular-tags')
+  @Throttle({ search: { limit: 30, ttl: 60000 } })
   async popularTags(): Promise<string[]> {
     return await this.productService.findPopularTags();
   }

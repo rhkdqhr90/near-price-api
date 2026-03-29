@@ -1,10 +1,18 @@
-import { IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { DEFAULT_PAGINATION_LIMIT } from '../../common/constants/pagination.constants';
 
 export class SearchProductQueryDto {
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   q?: string;
 
   @IsOptional()
