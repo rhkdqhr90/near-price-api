@@ -200,7 +200,7 @@ resource "aws_s3_bucket_policy" "app_uploads" {
         Resource = "${aws_s3_bucket.app_uploads.arn}/*"
         Condition = {
           StringEquals = {
-            "AWS:SourceArn" = "arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/*"
+            "AWS:SourceArn" = aws_cloudfront_distribution.uploads.arn
           }
         }
       },

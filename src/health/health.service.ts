@@ -14,12 +14,16 @@ export class HealthService {
   async check() {
     const isDbConnected = await this.checkDatabase();
     const uptime = Math.floor((Date.now() - this.startTime) / 1000);
+    const isProduction =
+      this.configService.get<string>('NODE_ENV') === 'production';
 
     return {
       status: isDbConnected ? 'ok' : 'degraded',
       timestamp: new Date().toISOString(),
       uptime,
-      database: isDbConnected ? 'connected' : 'disconnected',
+      ...(isProduction
+        ? {}
+        : { database: isDbConnected ? 'connected' : 'disconnected' }),
     };
   }
 

@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { BadgeCategory } from '../entities/badge-definition.entity';
 import { User } from '../../user/entities/user.entity';
 import { PriceVerification } from '../../price-verification/entities/price-verification.entity';
+import { UserBadgesResponseDto } from '../dto/user-badges-response.dto';
 
 export interface BadgeEvaluationContext {
   totalRegistrations: number;
@@ -24,23 +25,37 @@ export class BadgeEvaluatorService {
   /**
    * 사용자 뱃지 정보 조회 (API 응답용)
    */
-  async getUserBadges(userId: string) {
+  async getUserBadges(userId: string): Promise<UserBadgesResponseDto> {
     const user = await this.userRepository.findOne({
       where: { id: userId },
-      relations: ['prices'],
     });
     if (!user) {
       return { earned: [], progress: [] };
     }
 
-    const totalVerifications = await this.priceVerificationRepository.countBy({
-      verifier: { id: userId },
-    });
+    const [totalRegistrations, totalVerifications] = await Promise.all([
+      this.userRepository
+        .createQueryBuilder('u')
+        .leftJoin('u.prices', 'p')
+        .select('COUNT(p.id)', 'cnt')
+        .where('u.id = :userId', { userId })
+        .getRawOne<{ cnt: string }>()
+        .then((r) => parseInt(r?.cnt ?? '0', 10)),
+      this.priceVerificationRepository.countBy({
+        verifier: { id: userId },
+      }),
+    ]);
+
+    const trustScoreMaintainedDays = Math.floor(
+      (Date.now() - (user.createdAt?.getTime() ?? Date.now())) /
+        (1000 * 60 * 60 * 24),
+    );
 
     const context: BadgeEvaluationContext = {
-      totalRegistrations: user.prices?.length ?? 0,
+      totalRegistrations,
       totalVerifications,
       trustScore: user.trustScore ?? 0,
+      trustScoreMaintainedDays,
     };
 
     const earnedIds = this.evaluateEarnedBadges(context);
@@ -55,7 +70,7 @@ export class BadgeEvaluatorService {
           category: def.category,
         };
       })
-      .filter(Boolean);
+      .filter((item): item is NonNullable<typeof item> => item !== null);
 
     const progressRaw = this.evaluateProgressBadges(context);
     const progress = progressRaw
@@ -72,14 +87,14 @@ export class BadgeEvaluatorService {
           progressPercent: p.progressPercent,
         };
       })
-      .filter(Boolean);
+      .filter((item): item is NonNullable<typeof item> => item !== null);
 
     return { earned, progress };
   }
   /**
    * 뱃지 정의 (마스터 데이터)
    */
-  private badgeDefinitions = [
+  private readonly badgeDefinitions = [
     // 등록 기반 뱃지
     {
       id: 'registration_10',

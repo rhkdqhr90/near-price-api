@@ -9,6 +9,16 @@ describe('NaverService', () => {
   let axiosGetSpy: jest.SpyInstance;
 
   const mockConfigService = {
+    get: jest.fn((key: string) => {
+      const config: Record<string, string> = {
+        NODE_ENV: 'test',
+        NAVER_MAP_CLIENT_ID: 'test-map-client-id',
+        NAVER_MAP_CLIENT_SECRET: 'test-map-client-secret',
+        NAVER_SEARCH_CLIENT_ID: 'test-search-client-id',
+        NAVER_SEARCH_CLIENT_SECRET: 'test-search-client-secret',
+      };
+      return config[key];
+    }),
     getOrThrow: jest.fn((key: string) => {
       const config: Record<string, string> = {
         NAVER_MAP_CLIENT_ID: 'test-map-client-id',
@@ -41,7 +51,9 @@ describe('NaverService', () => {
     const mockResponse = {
       status: '200',
       meta: { totalCount: 1, page: 1, count: 1 },
-      addresses: [{ roadAddress: '서울특별시 강남구 테헤란로 1', x: '127.0', y: '37.0' }],
+      addresses: [
+        { roadAddress: '서울특별시 강남구 테헤란로 1', x: '127.0', y: '37.0' },
+      ],
       errorMessage: '',
     };
 
@@ -71,22 +83,24 @@ describe('NaverService', () => {
     });
 
     describe('실패 케이스', () => {
-      it('axios 에러 발생 시 BadGatewayException을 던져야 한다', async () => {
-        // Arrange
-        const axiosError = new Error('Network Error');
-        axiosGetSpy.mockRejectedValueOnce(axiosError);
+      it('Naver와 Vworld 모두 실패 시 BadGatewayException을 던져야 한다', async () => {
+        // Arrange — Naver 실패 후 Vworld 폴백도 실패
+        const naverError = new Error('Naver Network Error');
+        const vworldError = new Error('Vworld Network Error');
+        axiosGetSpy
+          .mockRejectedValueOnce(naverError) // Naver geocode 실패
+          .mockRejectedValueOnce(vworldError); // Vworld fallback 실패
         const loggerErrorSpy = jest
           .spyOn(Logger.prototype, 'error')
           .mockImplementation(() => undefined);
 
         // Act & Assert
-        await expect(service.geocode(query)).rejects.toThrow(BadGatewayException);
         await expect(service.geocode(query)).rejects.toThrow(
-          '네이버 지오코딩 API 호출 실패',
+          BadGatewayException,
         );
         expect(loggerErrorSpy).toHaveBeenCalledWith(
-          '네이버 지오코딩 API 호출 실패',
-          axiosError.message,
+          '네이버 지오코딩 API 호출 실패, Vworld 폴백',
+          naverError.message,
         );
       });
     });
@@ -233,7 +247,9 @@ describe('NaverService', () => {
           .mockImplementation(() => undefined);
 
         // Act & Assert
-        await expect(service.search(query)).rejects.toThrow(BadGatewayException);
+        await expect(service.search(query)).rejects.toThrow(
+          BadGatewayException,
+        );
         await expect(service.search(query)).rejects.toThrow(
           '네이버 로컬 검색 API 호출 실패',
         );

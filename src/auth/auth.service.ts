@@ -13,6 +13,10 @@ import { UserOauth, OAuthProvider } from '../user/entities/user-oauth.entity';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { RedisService } from '../redis/redis.service';
+
+const REFRESH_TOKEN_PREFIX = 'rt:';
+const REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60; // 7일
 
 interface KakaoUserInfo {
   id: number;
@@ -38,6 +42,7 @@ export class AuthService {
     private readonly dataSource: DataSource,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly redisService: RedisService,
   ) {}
 
   async kakaoLogin(kakaoAccessToken: string): Promise<AuthResponseDto> {
@@ -99,6 +104,16 @@ export class AuthService {
       throw new UnauthorizedException('유효하지 않은 토큰 타입입니다.');
     }
 
+    // Redis에 저장된 리프레시 토큰과 비교 (Redis 미설정 시 스킵)
+    const storedToken = await this.redisService.get(
+      `${REFRESH_TOKEN_PREFIX}${payload.sub}`,
+    );
+    if (storedToken !== null && storedToken !== dto.refreshToken) {
+      throw new UnauthorizedException(
+        '이미 사용되었거나 무효화된 리프레시 토큰입니다.',
+      );
+    }
+
     const user = await this.userRepository.findOne({
       where: { id: payload.sub },
     });
@@ -109,14 +124,19 @@ export class AuthService {
     return await this.issueTokens(user);
   }
 
+  async logout(userId: string): Promise<void> {
+    await this.redisService.del(`${REFRESH_TOKEN_PREFIX}${userId}`);
+  }
+
   private async getKakaoUserInfo(
     kakaoAccessToken: string,
   ): Promise<KakaoUserInfo> {
     try {
       const { data } = await axios.get<KakaoUserInfo>(
-        `${this.configService.get('KAKAO_API_URL')}/v2/user/me`,
+        `${this.configService.getOrThrow<string>('KAKAO_API_URL')}/v2/user/me`,
         {
           headers: { Authorization: `Bearer ${kakaoAccessToken}` },
+          timeout: 5000,
         },
       );
       return data;
@@ -198,6 +218,13 @@ export class AuthService {
     const refreshToken = await this.jwtService.signAsync(refreshPayload, {
       expiresIn: this.configService.getOrThrow('JWT_REFRESH_EXPIRES_IN'),
     });
+
+    // Redis에 리프레시 토큰 저장 (이전 토큰 자동 덮어쓰기 = rotation)
+    await this.redisService.set(
+      `${REFRESH_TOKEN_PREFIX}${user.id}`,
+      refreshToken,
+      REFRESH_TOKEN_TTL_SECONDS,
+    );
 
     const dto = new AuthResponseDto();
     dto.accessToken = accessToken;

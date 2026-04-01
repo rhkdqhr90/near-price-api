@@ -30,10 +30,14 @@ export class GlobalExceptionFilter implements ExceptionFilter {
             message?: unknown;
             error?: string;
           };
+          // class-validator 에러는 message가 배열로 오므로 프로덕션에서 상세 노출 방지
+          const rawMessage = body.message ?? body.error;
+          const message = Array.isArray(rawMessage)
+            ? '입력값이 올바르지 않습니다.'
+            : (rawMessage ?? '요청 처리 중 오류가 발생했습니다.');
           responseBody = {
             statusCode: body.statusCode,
-            message:
-              body.message ?? body.error ?? '요청 처리 중 오류가 발생했습니다.',
+            message,
             timestamp: new Date().toISOString(),
           };
         }

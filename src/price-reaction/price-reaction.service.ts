@@ -1,10 +1,11 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Price } from '../price/entities/price.entity';
 import { User } from '../user/entities/user.entity';
 import { AdminReportDto } from './dto/admin-report.dto';
@@ -26,99 +27,133 @@ export class PriceReactionService {
 
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+
+    private readonly dataSource: DataSource,
   ) {}
 
   async confirm(priceId: string, userId: string): Promise<void> {
-    const existing = await this.reactionRepository.findOne({
-      where: { price: { id: priceId }, user: { id: userId } },
-      relations: ['price', 'price.user'],
-    });
+    let priceOwnerId: string | null = null;
 
-    if (existing) {
-      const priceOwnerId = existing.price.user?.id ?? null;
+    await this.dataSource.transaction(async (manager) => {
+      const existing = await manager.findOne(PriceReaction, {
+        where: { price: { id: priceId }, user: { id: userId } },
+        relations: ['price', 'price.user'],
+        lock: { mode: 'pessimistic_write' },
+      });
 
-      if (existing.type === PriceReactionType.CONFIRM) {
-        await this.reactionRepository.remove(existing);
-      } else {
-        existing.type = PriceReactionType.CONFIRM;
-        existing.reason = null;
-        await this.reactionRepository.save(existing);
+      if (existing) {
+        priceOwnerId = existing.price.user?.id ?? null;
+        if (existing.price.user?.id === userId) {
+          throw new ForbiddenException(
+            '본인이 등록한 가격에는 반응할 수 없습니다.',
+          );
+        }
+        if (existing.type === PriceReactionType.CONFIRM) {
+          await manager.remove(existing);
+        } else {
+          existing.type = PriceReactionType.CONFIRM;
+          existing.reason = null;
+          await manager.save(existing);
+        }
+        return;
       }
 
-      if (priceOwnerId) await this.recalculateTrustScore(priceOwnerId);
-      return;
-    }
+      const price = await manager.findOne(Price, {
+        where: { id: priceId },
+        relations: ['user'],
+      });
+      if (!price) throw new NotFoundException('가격 정보가 없습니다.');
 
-    const price = await this.priceRepository.findOne({
-      where: { id: priceId },
-      relations: ['user'],
+      priceOwnerId = price.user?.id ?? null;
+
+      if (price.user?.id === userId) {
+        throw new ForbiddenException(
+          '본인이 등록한 가격에는 반응할 수 없습니다.',
+        );
+      }
+
+      try {
+        await manager.save(
+          manager.create(PriceReaction, {
+            price,
+            user: { id: userId } as User,
+            type: PriceReactionType.CONFIRM,
+            reason: null,
+          }),
+        );
+      } catch (err: unknown) {
+        // 동시 요청으로 인한 유니크 제약 위반: 이미 생성됨 → 무시
+        if (
+          (err as { code?: string })?.code === DB_ERROR_CODES.UNIQUE_VIOLATION
+        )
+          return;
+        throw err;
+      }
     });
-    if (!price) throw new NotFoundException('가격 정보가 없습니다.');
 
-    try {
-      await this.reactionRepository.save(
-        this.reactionRepository.create({
-          price,
-          user: { id: userId } as User,
-          type: PriceReactionType.CONFIRM,
-          reason: null,
-        }),
-      );
-    } catch (err: unknown) {
-      // 동시 요청으로 인한 유니크 제약 위반: 이미 생성됨 → 무시
-      if ((err as { code?: string })?.code === DB_ERROR_CODES.UNIQUE_VIOLATION)
-        return;
-      throw err;
-    }
-
-    if (price.user?.id) await this.recalculateTrustScore(price.user.id);
+    if (priceOwnerId) await this.recalculateTrustScore(priceOwnerId);
   }
 
   async report(priceId: string, userId: string, reason: string): Promise<void> {
-    const existing = await this.reactionRepository.findOne({
-      where: { price: { id: priceId }, user: { id: userId } },
-      relations: ['price', 'price.user'],
-    });
+    let priceOwnerId: string | null = null;
 
-    if (existing) {
-      if (existing.type === PriceReactionType.REPORT) {
-        throw new ConflictException('이미 신고한 가격입니다.');
+    await this.dataSource.transaction(async (manager) => {
+      const existing = await manager.findOne(PriceReaction, {
+        where: { price: { id: priceId }, user: { id: userId } },
+        relations: ['price', 'price.user'],
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (existing) {
+        if (existing.type === PriceReactionType.REPORT) {
+          throw new ConflictException('이미 신고한 가격입니다.');
+        }
+        if (existing.price.user?.id === userId) {
+          throw new ForbiddenException(
+            '본인이 등록한 가격에는 반응할 수 없습니다.',
+          );
+        }
+        priceOwnerId = existing.price.user?.id ?? null;
+        existing.type = PriceReactionType.REPORT;
+        existing.reason = reason;
+        await manager.save(existing);
+        return;
       }
 
-      const priceOwnerId = existing.price.user?.id ?? null;
-      existing.type = PriceReactionType.REPORT;
-      existing.reason = reason;
-      await this.reactionRepository.save(existing);
+      const price = await manager.findOne(Price, {
+        where: { id: priceId },
+        relations: ['user'],
+      });
+      if (!price) throw new NotFoundException('가격 정보가 없습니다.');
 
-      if (priceOwnerId) await this.recalculateTrustScore(priceOwnerId);
-      return;
-    }
+      priceOwnerId = price.user?.id ?? null;
 
-    const price = await this.priceRepository.findOne({
-      where: { id: priceId },
-      relations: ['user'],
-    });
-    if (!price) throw new NotFoundException('가격 정보가 없습니다.');
-
-    try {
-      await this.reactionRepository.save(
-        this.reactionRepository.create({
-          price,
-          user: { id: userId } as User,
-          type: PriceReactionType.REPORT,
-          reason,
-        }),
-      );
-    } catch (err: unknown) {
-      if (
-        (err as { code?: string })?.code === DB_ERROR_CODES.UNIQUE_VIOLATION
-      ) {
-        throw new ConflictException('이미 신고한 가격입니다.');
+      if (price.user?.id === userId) {
+        throw new ForbiddenException(
+          '본인이 등록한 가격에는 반응할 수 없습니다.',
+        );
       }
-      throw err;
-    }
 
-    if (price.user?.id) await this.recalculateTrustScore(price.user.id);
+      try {
+        await manager.save(
+          manager.create(PriceReaction, {
+            price,
+            user: { id: userId } as User,
+            type: PriceReactionType.REPORT,
+            reason,
+          }),
+        );
+      } catch (err: unknown) {
+        if (
+          (err as { code?: string })?.code === DB_ERROR_CODES.UNIQUE_VIOLATION
+        ) {
+          throw new ConflictException('이미 신고한 가격입니다.');
+        }
+        throw err;
+      }
+    });
+
+    if (priceOwnerId) await this.recalculateTrustScore(priceOwnerId);
   }
 
   async getReactions(

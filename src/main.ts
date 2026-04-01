@@ -1,7 +1,6 @@
 import * as Sentry from '@sentry/nestjs';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { join } from 'path';
 import { AppModule } from './app.module';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
@@ -80,11 +79,25 @@ async function bootstrap() {
     });
   }
 
-  // 전역 유효성 검사
+  // CORS — 문자열 배열은 정확한 Origin 매칭 (suffix 우회 불가)
+  const corsOrigins = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
+    : ['http://localhost:5173'];
+
+  // 프로덕션에서 http:// Origin이 포함되면 경고 (https만 허용해야 함)
+  if (process.env.NODE_ENV === 'production') {
+    const insecure = corsOrigins.filter((o) => o.startsWith('http://'));
+    if (insecure.length > 0) {
+      new Logger('Bootstrap').warn(
+        `[CORS] 프로덕션에서 http:// Origin이 허용되어 있습니다: ${insecure.join(', ')}`,
+      );
+    }
+  }
+
   app.enableCors({
-    origin: process.env.CORS_ORIGIN?.split(',') ?? ['http://localhost:5173'],
+    origin: corsOrigins,
     credentials: true,
-    maxAge: 86400, // 24시간
+    maxAge: 86400,
   });
 
   app.useGlobalPipes(
@@ -97,12 +110,6 @@ async function bootstrap() {
 
   // 글로벌 예외 필터 등록
   app.useGlobalFilters(new GlobalExceptionFilter());
-
-  // 업로드 이미지 정적 파일 서빙 (캐시 설정)
-  app.useStaticAssets(join(process.cwd(), 'uploads'), {
-    prefix: '/uploads',
-    maxAge: process.env.NODE_ENV === 'production' ? '7d' : '1h',
-  });
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);

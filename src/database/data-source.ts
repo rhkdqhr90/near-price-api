@@ -20,13 +20,22 @@ import { OwnerPost } from '../flyer/entities/owner-post.entity';
 
 config();
 
+const isProduction = process.env.NODE_ENV === 'production';
+
+function requireEnv(key: string, devFallback?: string): string {
+  const value = process.env[key];
+  if (value) return value;
+  if (!isProduction && devFallback !== undefined) return devFallback;
+  throw new Error(`[DataSource] 필수 환경변수 누락: ${key}`);
+}
+
 export const AppDataSource = new DataSource({
   type: 'postgres',
-  host: process.env.DB_HOST ?? 'localhost',
-  port: parseInt(process.env.DB_PORT ?? '5432', 10),
-  username: process.env.DB_USERNAME ?? 'postgres',
-  password: process.env.DB_PASSWORD ?? '',
-  database: process.env.DB_DATABASE ?? 'nearprice',
+  host: requireEnv('DB_HOST', 'localhost'),
+  port: parseInt(requireEnv('DB_PORT', '5432'), 10),
+  username: requireEnv('DB_USERNAME', 'postgres'),
+  password: requireEnv('DB_PASSWORD', ''),
+  database: requireEnv('DB_DATABASE', 'nearprice'),
   entities: [
     User,
     UserOauth,

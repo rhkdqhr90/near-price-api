@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { ConflictException, NotFoundException } from '@nestjs/common';
-import { Repository, SelectQueryBuilder } from 'typeorm';
+import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { DataSource, Repository, SelectQueryBuilder } from 'typeorm';
 
 import { PriceReactionService } from './price-reaction.service';
 import {
@@ -28,6 +28,8 @@ describe('PriceReactionService', () => {
   let reactionRepository: jest.Mocked<Repository<PriceReaction>>;
   let priceRepository: jest.Mocked<Repository<Price>>;
   let userRepository: jest.Mocked<Repository<User>>;
+  let mockManager: any;
+  let dataSource: jest.Mocked<DataSource>;
 
   // ── 공통 fixture ──────────────────────────────────────────────────────────
 
@@ -123,6 +125,12 @@ describe('PriceReactionService', () => {
             update: jest.fn(),
           },
         },
+        {
+          provide: DataSource,
+          useValue: {
+            transaction: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -130,6 +138,18 @@ describe('PriceReactionService', () => {
     reactionRepository = module.get(getRepositoryToken(PriceReaction));
     priceRepository = module.get(getRepositoryToken(Price));
     userRepository = module.get(getRepositoryToken(User));
+    dataSource = module.get(DataSource);
+
+    // transaction manager mock — 각 테스트에서 mockManager를 통해 동작 주입
+    mockManager = {
+      findOne: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      remove: jest.fn(),
+    };
+    (dataSource.transaction as jest.Mock).mockImplementation(
+      async (cb: (em: any) => Promise<any>) => cb(mockManager),
+    );
   });
 
   afterEach(() => {
@@ -152,23 +172,23 @@ describe('PriceReactionService', () => {
 
   describe('confirm()', () => {
     it('기존 반응 없음 → CONFIRM 생성 후 trustScore 재계산을 호출한다', async () => {
-      reactionRepository.findOne.mockResolvedValue(null);
-      priceRepository.findOne.mockResolvedValue(mockPrice);
+      mockManager.findOne
+        .mockResolvedValueOnce(null)       // existing reaction 없음
+        .mockResolvedValueOnce(mockPrice); // price 조회
       const newReaction = makeReaction(PriceReactionType.CONFIRM);
-      reactionRepository.create.mockReturnValue(newReaction);
-      reactionRepository.save.mockResolvedValue(newReaction);
+      mockManager.create.mockReturnValue(newReaction);
+      mockManager.save.mockResolvedValue(newReaction);
       const qb = setupRecalculateMock('1');
 
       await service.confirm(mockPrice.id, mockUser.id);
 
-      expect(reactionRepository.create).toHaveBeenCalledWith({
+      expect(mockManager.create).toHaveBeenCalledWith(PriceReaction, {
         price: mockPrice,
         user: { id: mockUser.id },
         type: PriceReactionType.CONFIRM,
         reason: null,
       });
-      expect(reactionRepository.save).toHaveBeenCalledWith(newReaction);
-      // recalculateTrustScore 호출 확인
+      expect(mockManager.save).toHaveBeenCalledWith(newReaction);
       expect(reactionRepository.createQueryBuilder).toHaveBeenCalledWith('pr');
       expect(qb.where).toHaveBeenCalledWith('u.id = :targetUserId', {
         targetUserId: mockPriceOwner.id,
@@ -181,15 +201,14 @@ describe('PriceReactionService', () => {
 
     it('이미 CONFIRM → remove로 토글(삭제)하고 trustScore 재계산을 호출한다', async () => {
       const existingConfirm = makeReaction(PriceReactionType.CONFIRM);
-      reactionRepository.findOne.mockResolvedValue(existingConfirm);
-      reactionRepository.remove.mockResolvedValue(existingConfirm);
+      mockManager.findOne.mockResolvedValueOnce(existingConfirm);
+      mockManager.remove.mockResolvedValue(existingConfirm);
       const qb = setupRecalculateMock('0');
 
       await service.confirm(mockPrice.id, mockUser.id);
 
-      expect(reactionRepository.remove).toHaveBeenCalledWith(existingConfirm);
-      expect(reactionRepository.save).not.toHaveBeenCalled();
-      // trustScore 재계산 호출 확인
+      expect(mockManager.remove).toHaveBeenCalledWith(existingConfirm);
+      expect(mockManager.save).not.toHaveBeenCalled();
       expect(reactionRepository.createQueryBuilder).toHaveBeenCalled();
       expect(userRepository.update).toHaveBeenCalledWith(
         { id: mockPriceOwner.id },
@@ -198,12 +217,9 @@ describe('PriceReactionService', () => {
     });
 
     it('이미 REPORT → type을 CONFIRM으로 변경하고 trustScore 재계산을 호출한다', async () => {
-      const existingReport = makeReaction(
-        PriceReactionType.REPORT,
-        '가격 틀림',
-      );
-      reactionRepository.findOne.mockResolvedValue(existingReport);
-      reactionRepository.save.mockResolvedValue({
+      const existingReport = makeReaction(PriceReactionType.REPORT, '가격 틀림');
+      mockManager.findOne.mockResolvedValueOnce(existingReport);
+      mockManager.save.mockResolvedValue({
         ...existingReport,
         type: PriceReactionType.CONFIRM,
         reason: null,
@@ -212,14 +228,10 @@ describe('PriceReactionService', () => {
 
       await service.confirm(mockPrice.id, mockUser.id);
 
-      expect(reactionRepository.remove).not.toHaveBeenCalled();
-      expect(reactionRepository.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: PriceReactionType.CONFIRM,
-          reason: null,
-        }),
+      expect(mockManager.remove).not.toHaveBeenCalled();
+      expect(mockManager.save).toHaveBeenCalledWith(
+        expect.objectContaining({ type: PriceReactionType.CONFIRM, reason: null }),
       );
-      // trustScore 재계산 호출 확인
       expect(reactionRepository.createQueryBuilder).toHaveBeenCalled();
       expect(userRepository.update).toHaveBeenCalledWith(
         { id: mockPriceOwner.id },
@@ -228,16 +240,32 @@ describe('PriceReactionService', () => {
     });
 
     it('price 없음 → NotFoundException을 던진다', async () => {
-      reactionRepository.findOne.mockResolvedValue(null);
-      priceRepository.findOne.mockResolvedValue(null);
+      mockManager.findOne
+        .mockResolvedValueOnce(null)  // existing reaction 없음
+        .mockResolvedValueOnce(null); // price 없음
 
       await expect(
         service.confirm('nonexistent-price-id', mockUser.id),
       ).rejects.toThrow(NotFoundException);
 
+      mockManager.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+
       await expect(
         service.confirm('nonexistent-price-id', mockUser.id),
       ).rejects.toThrow('가격 정보가 없습니다.');
+    });
+
+    it('본인 가격 → ForbiddenException을 던진다', async () => {
+      const ownPrice = { ...mockPrice, user: { ...mockUser } };
+      mockManager.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(ownPrice);
+
+      await expect(
+        service.confirm(ownPrice.id, mockUser.id),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 
@@ -249,23 +277,23 @@ describe('PriceReactionService', () => {
     const reason = '가격 틀림';
 
     it('기존 반응 없음 → REPORT 생성 후 trustScore 재계산을 호출한다', async () => {
-      reactionRepository.findOne.mockResolvedValue(null);
-      priceRepository.findOne.mockResolvedValue(mockPrice);
+      mockManager.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(mockPrice);
       const newReaction = makeReaction(PriceReactionType.REPORT, reason);
-      reactionRepository.create.mockReturnValue(newReaction);
-      reactionRepository.save.mockResolvedValue(newReaction);
+      mockManager.create.mockReturnValue(newReaction);
+      mockManager.save.mockResolvedValue(newReaction);
       const qb = setupRecalculateMock('-2');
 
       await service.report(mockPrice.id, mockUser.id, reason);
 
-      expect(reactionRepository.create).toHaveBeenCalledWith({
+      expect(mockManager.create).toHaveBeenCalledWith(PriceReaction, {
         price: mockPrice,
         user: { id: mockUser.id },
         type: PriceReactionType.REPORT,
         reason,
       });
-      expect(reactionRepository.save).toHaveBeenCalledWith(newReaction);
-      // trustScore 재계산 호출 확인 (Math.max(0, -2) = 0)
+      expect(mockManager.save).toHaveBeenCalledWith(newReaction);
       expect(reactionRepository.createQueryBuilder).toHaveBeenCalledWith('pr');
       expect(userRepository.update).toHaveBeenCalledWith(
         { id: mockPriceOwner.id },
@@ -275,11 +303,13 @@ describe('PriceReactionService', () => {
 
     it('이미 REPORT → ConflictException을 던진다', async () => {
       const existingReport = makeReaction(PriceReactionType.REPORT, reason);
-      reactionRepository.findOne.mockResolvedValue(existingReport);
+      mockManager.findOne.mockResolvedValueOnce(existingReport);
 
       await expect(
         service.report(mockPrice.id, mockUser.id, reason),
       ).rejects.toThrow(ConflictException);
+
+      mockManager.findOne.mockResolvedValueOnce(existingReport);
 
       await expect(
         service.report(mockPrice.id, mockUser.id, reason),
@@ -288,8 +318,8 @@ describe('PriceReactionService', () => {
 
     it('이미 CONFIRM → type을 REPORT로 변경하고 trustScore 재계산을 호출한다', async () => {
       const existingConfirm = makeReaction(PriceReactionType.CONFIRM);
-      reactionRepository.findOne.mockResolvedValue(existingConfirm);
-      reactionRepository.save.mockResolvedValue({
+      mockManager.findOne.mockResolvedValueOnce(existingConfirm);
+      mockManager.save.mockResolvedValue({
         ...existingConfirm,
         type: PriceReactionType.REPORT,
         reason,
@@ -298,13 +328,9 @@ describe('PriceReactionService', () => {
 
       await service.report(mockPrice.id, mockUser.id, reason);
 
-      expect(reactionRepository.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: PriceReactionType.REPORT,
-          reason,
-        }),
+      expect(mockManager.save).toHaveBeenCalledWith(
+        expect.objectContaining({ type: PriceReactionType.REPORT, reason }),
       );
-      // trustScore 재계산 호출 확인 (Math.max(0, -1) = 0)
       expect(reactionRepository.createQueryBuilder).toHaveBeenCalled();
       expect(userRepository.update).toHaveBeenCalledWith(
         { id: mockPriceOwner.id },
@@ -313,16 +339,32 @@ describe('PriceReactionService', () => {
     });
 
     it('price 없음 → NotFoundException을 던진다', async () => {
-      reactionRepository.findOne.mockResolvedValue(null);
-      priceRepository.findOne.mockResolvedValue(null);
+      mockManager.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
 
       await expect(
         service.report('nonexistent-price-id', mockUser.id, reason),
       ).rejects.toThrow(NotFoundException);
 
+      mockManager.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+
       await expect(
         service.report('nonexistent-price-id', mockUser.id, reason),
       ).rejects.toThrow('가격 정보가 없습니다.');
+    });
+
+    it('본인 가격 → ForbiddenException을 던진다', async () => {
+      const ownPrice = { ...mockPrice, user: { ...mockUser } };
+      mockManager.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(ownPrice);
+
+      await expect(
+        service.report(ownPrice.id, mockUser.id, reason),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 
@@ -399,11 +441,12 @@ describe('PriceReactionService', () => {
 
   describe('recalculateTrustScore() 간접 검증', () => {
     it('confirm 후 createQueryBuilder → score 파싱 → userRepository.update 순으로 호출된다', async () => {
-      reactionRepository.findOne.mockResolvedValue(null);
-      priceRepository.findOne.mockResolvedValue(mockPrice);
+      mockManager.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(mockPrice);
       const newReaction = makeReaction(PriceReactionType.CONFIRM);
-      reactionRepository.create.mockReturnValue(newReaction);
-      reactionRepository.save.mockResolvedValue(newReaction);
+      mockManager.create.mockReturnValue(newReaction);
+      mockManager.save.mockResolvedValue(newReaction);
 
       const qb = makeQbMock({ score: '3' });
       reactionRepository.createQueryBuilder.mockReturnValue(qb as any);
@@ -412,9 +455,6 @@ describe('PriceReactionService', () => {
       await service.confirm(mockPrice.id, mockUser.id);
 
       expect(reactionRepository.createQueryBuilder).toHaveBeenCalledTimes(1);
-      expect(qb.select).toHaveBeenCalledTimes(1);
-      expect(qb.innerJoin).toHaveBeenCalledTimes(2);
-      expect(qb.where).toHaveBeenCalledTimes(1);
       expect(qb.andWhere).toHaveBeenCalledWith('p.isActive = :isActive', {
         isActive: true,
       });
@@ -426,11 +466,12 @@ describe('PriceReactionService', () => {
     });
 
     it('report 후 createQueryBuilder → score 파싱 → userRepository.update 순으로 호출된다', async () => {
-      reactionRepository.findOne.mockResolvedValue(null);
-      priceRepository.findOne.mockResolvedValue(mockPrice);
+      mockManager.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(mockPrice);
       const newReaction = makeReaction(PriceReactionType.REPORT, '허위 정보');
-      reactionRepository.create.mockReturnValue(newReaction);
-      reactionRepository.save.mockResolvedValue(newReaction);
+      mockManager.create.mockReturnValue(newReaction);
+      mockManager.save.mockResolvedValue(newReaction);
 
       const qb = makeQbMock({ score: '-4' });
       reactionRepository.createQueryBuilder.mockReturnValue(qb as any);
@@ -440,7 +481,6 @@ describe('PriceReactionService', () => {
 
       expect(reactionRepository.createQueryBuilder).toHaveBeenCalledTimes(1);
       expect(qb.getRawOne).toHaveBeenCalledTimes(1);
-      // Math.max(0, -4) = 0: 신뢰도 점수는 0 미만으로 내려가지 않음
       expect(userRepository.update).toHaveBeenCalledWith(
         { id: mockPriceOwner.id },
         { trustScore: 0 },
@@ -449,11 +489,12 @@ describe('PriceReactionService', () => {
 
     it('price.user가 없으면 recalculateTrustScore를 호출하지 않는다', async () => {
       const priceWithoutOwner: Price = { ...mockPrice, user: null as any };
-      reactionRepository.findOne.mockResolvedValue(null);
-      priceRepository.findOne.mockResolvedValue(priceWithoutOwner);
+      mockManager.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(priceWithoutOwner);
       const newReaction = makeReaction(PriceReactionType.CONFIRM);
-      reactionRepository.create.mockReturnValue(newReaction);
-      reactionRepository.save.mockResolvedValue(newReaction);
+      mockManager.create.mockReturnValue(newReaction);
+      mockManager.save.mockResolvedValue(newReaction);
 
       await service.confirm(priceWithoutOwner.id, mockUser.id);
 

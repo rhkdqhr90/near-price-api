@@ -43,8 +43,9 @@ export class ProductController {
     return await this.productService.findPopularTags();
   }
 
-  // GET /product/search?q=keyword — ES 검색 (반드시 :id 라우터보다 위에 위치)
+  // GET /product/search?q=keyword — (반드시 :id 라우터보다 위에 위치)
   @Get('search')
+  @Throttle({ search: { limit: 30, ttl: 60000 } })
   async search(
     @Query() query: SearchProductQueryDto,
   ): Promise<SearchProductResponseDto[]> {

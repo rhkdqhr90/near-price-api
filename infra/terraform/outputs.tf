@@ -51,6 +51,17 @@ output "vpc_deployment_info" {
   }
 }
 
+# CloudFront CDN 정보
+output "cloudfront_domain" {
+  description = "이미지 CDN 도메인 — .env CLOUDFRONT_DOMAIN에 설정"
+  value       = aws_cloudfront_distribution.uploads.domain_name
+}
+
+output "cloudfront_distribution_id" {
+  description = "CloudFront Distribution ID (캐시 무효화에 필요)"
+  value       = aws_cloudfront_distribution.uploads.id
+}
+
 # S3 정보
 output "s3_deployment_info" {
   description = "S3 버킷 정보"

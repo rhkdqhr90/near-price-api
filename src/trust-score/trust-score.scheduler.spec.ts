@@ -25,17 +25,13 @@ jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
 
 describe('TrustScoreScheduler', () => {
   let scheduler: TrustScoreScheduler;
-  let userRepository: jest.Mocked<
-    Pick<Repository<User>, 'find' | 'update'>
-  >;
-  let priceRepository: jest.Mocked<
-    Pick<Repository<Price>, 'find' | 'update'>
-  >;
+  let userRepository: jest.Mocked<Pick<Repository<User>, 'find' | 'update'>>;
+  let priceRepository: jest.Mocked<Pick<Repository<Price>, 'find' | 'update'>>;
   let verificationRepository: jest.Mocked<
     Pick<Repository<PriceVerification>, 'find'>
   >;
   let userTrustScoreRepository: jest.Mocked<
-    Pick<Repository<UserTrustScore>, 'findOne' | 'update' | 'save' | 'create'>
+    Pick<Repository<UserTrustScore>, 'find' | 'findOne' | 'update' | 'save' | 'create'>
   >;
   let userTrustScoreCalculator: jest.Mocked<UserTrustScoreCalculator>;
   let priceTrustScoreCalculator: jest.Mocked<PriceTrustScoreCalculator>;
@@ -62,7 +58,7 @@ describe('TrustScoreScheduler', () => {
       createdAt: new Date('2026-01-01'),
       updatedAt: new Date('2026-01-01'),
       ...overrides,
-    } as User);
+    }) as User;
 
   const makePrice = (overrides: Partial<Price> = {}): Price =>
     ({
@@ -75,7 +71,7 @@ describe('TrustScoreScheduler', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
       ...overrides,
-    } as Price);
+    }) as Price;
 
   const makeVerification = (
     overrides: Partial<PriceVerification> = {},
@@ -87,7 +83,7 @@ describe('TrustScoreScheduler', () => {
       verifier: makeUser(),
       price: makePrice(),
       ...overrides,
-    } as PriceVerification);
+    }) as PriceVerification;
 
   const makeUserTrustScore = (
     overrides: Partial<UserTrustScore> = {},
@@ -103,7 +99,7 @@ describe('TrustScoreScheduler', () => {
       createdAt: new Date(),
       calculatedAt: new Date(),
       ...overrides,
-    } as UserTrustScore);
+    }) as UserTrustScore;
 
   const defaultScoreResult: UserTrustScoreResult = {
     trustScore: 65,
@@ -141,6 +137,7 @@ describe('TrustScoreScheduler', () => {
         {
           provide: getRepositoryToken(UserTrustScore),
           useValue: {
+            find: jest.fn(),
             findOne: jest.fn(),
             update: jest.fn(),
             save: jest.fn(),
@@ -243,10 +240,13 @@ describe('TrustScoreScheduler', () => {
         .mockResolvedValueOnce(verifications) // recalculatePriceTrustScores: 전체 검증 일괄 조회
         .mockResolvedValue([]); // recalculateUserTrustScores용
 
-      const scoredResult: PriceTrustScoreResult = { score: 88.5, status: 'scored' };
-      (priceTrustScoreCalculator.calculatePriceTrustScore as jest.Mock).mockReturnValue(
-        scoredResult,
-      );
+      const scoredResult: PriceTrustScoreResult = {
+        score: 88.5,
+        status: 'scored',
+      };
+      (
+        priceTrustScoreCalculator.calculatePriceTrustScore as jest.Mock
+      ).mockReturnValue(scoredResult);
 
       (userRepository.find as jest.Mock).mockResolvedValue([]);
 
@@ -274,9 +274,9 @@ describe('TrustScoreScheduler', () => {
         score: null,
         status: 'verifying',
       };
-      (priceTrustScoreCalculator.calculatePriceTrustScore as jest.Mock).mockReturnValue(
-        verifyingResult,
-      );
+      (
+        priceTrustScoreCalculator.calculatePriceTrustScore as jest.Mock
+      ).mockReturnValue(verifyingResult);
 
       (userRepository.find as jest.Mock).mockResolvedValue([]);
 
@@ -299,9 +299,9 @@ describe('TrustScoreScheduler', () => {
         score: null,
         status: 'scored',
       };
-      (priceTrustScoreCalculator.calculatePriceTrustScore as jest.Mock).mockReturnValue(
-        nullScoreResult,
-      );
+      (
+        priceTrustScoreCalculator.calculatePriceTrustScore as jest.Mock
+      ).mockReturnValue(nullScoreResult);
 
       (userRepository.find as jest.Mock).mockResolvedValue([]);
 
@@ -338,16 +338,21 @@ describe('TrustScoreScheduler', () => {
         .mockResolvedValueOnce(verifications)
         .mockResolvedValue([]);
 
-      const scoredResult: PriceTrustScoreResult = { score: 75, status: 'scored' };
-      (priceTrustScoreCalculator.calculatePriceTrustScore as jest.Mock).mockReturnValue(
-        scoredResult,
-      );
+      const scoredResult: PriceTrustScoreResult = {
+        score: 75,
+        status: 'scored',
+      };
+      (
+        priceTrustScoreCalculator.calculatePriceTrustScore as jest.Mock
+      ).mockReturnValue(scoredResult);
 
       (userRepository.find as jest.Mock).mockResolvedValue([]);
 
       await scheduler.recalculateAll();
 
-      expect(priceTrustScoreCalculator.calculatePriceTrustScore).toHaveBeenCalledTimes(2);
+      expect(
+        priceTrustScoreCalculator.calculatePriceTrustScore,
+      ).toHaveBeenCalledTimes(2);
     });
 
     it('verifier.trustScore가 없으면 기본값 50 사용', async () => {
@@ -364,16 +369,21 @@ describe('TrustScoreScheduler', () => {
         .mockResolvedValueOnce([verification])
         .mockResolvedValue([]);
 
-      const scoredResult: PriceTrustScoreResult = { score: 70, status: 'scored' };
-      (priceTrustScoreCalculator.calculatePriceTrustScore as jest.Mock).mockReturnValue(
-        scoredResult,
-      );
+      const scoredResult: PriceTrustScoreResult = {
+        score: 70,
+        status: 'scored',
+      };
+      (
+        priceTrustScoreCalculator.calculatePriceTrustScore as jest.Mock
+      ).mockReturnValue(scoredResult);
 
       (userRepository.find as jest.Mock).mockResolvedValue([]);
 
       await scheduler.recalculateAll();
 
-      expect(priceTrustScoreCalculator.calculatePriceTrustScore).toHaveBeenCalledWith([
+      expect(
+        priceTrustScoreCalculator.calculatePriceTrustScore,
+      ).toHaveBeenCalledWith([
         { result: VerificationResult.CONFIRMED, verifierTrustScore: 50 },
       ]);
     });
@@ -388,7 +398,9 @@ describe('TrustScoreScheduler', () => {
 
       await scheduler.recalculateAll();
 
-      expect(userTrustScoreCalculator.calculateUserTrustScore).not.toHaveBeenCalled();
+      expect(
+        userTrustScoreCalculator.calculateUserTrustScore,
+      ).not.toHaveBeenCalled();
       expect(userRepository.update).not.toHaveBeenCalled();
     });
 
@@ -398,14 +410,12 @@ describe('TrustScoreScheduler', () => {
       (priceRepository.find as jest.Mock).mockResolvedValue([]);
       (userRepository.find as jest.Mock).mockResolvedValue([user]);
       (verificationRepository.find as jest.Mock).mockResolvedValue([]);
-      (userTrustScoreCalculator.calculateUserTrustScore as jest.Mock).mockReturnValue(
-        defaultScoreResult,
-      );
+      (
+        userTrustScoreCalculator.calculateUserTrustScore as jest.Mock
+      ).mockReturnValue(defaultScoreResult);
 
-      const existingScore = makeUserTrustScore({ id: 'uts-1' });
-      (userTrustScoreRepository.findOne as jest.Mock).mockResolvedValue(
-        existingScore,
-      );
+      const existingScore = makeUserTrustScore({ id: 'uts-1', user: user as any });
+      (userTrustScoreRepository.find as jest.Mock).mockResolvedValue([existingScore]);
 
       await scheduler.recalculateAll();
 
@@ -430,10 +440,10 @@ describe('TrustScoreScheduler', () => {
       (priceRepository.find as jest.Mock).mockResolvedValue([]);
       (userRepository.find as jest.Mock).mockResolvedValue([user]);
       (verificationRepository.find as jest.Mock).mockResolvedValue([]);
-      (userTrustScoreCalculator.calculateUserTrustScore as jest.Mock).mockReturnValue(
-        defaultScoreResult,
-      );
-      (userTrustScoreRepository.findOne as jest.Mock).mockResolvedValue(null);
+      (
+        userTrustScoreCalculator.calculateUserTrustScore as jest.Mock
+      ).mockReturnValue(defaultScoreResult);
+      (userTrustScoreRepository.find as jest.Mock).mockResolvedValue([]);
       (userTrustScoreRepository.create as jest.Mock).mockReturnValue(newScore);
       (userTrustScoreRepository.save as jest.Mock).mockResolvedValue(newScore);
 
@@ -449,7 +459,7 @@ describe('TrustScoreScheduler', () => {
       (priceRepository.find as jest.Mock).mockResolvedValue([]);
       (userRepository.find as jest.Mock).mockResolvedValue([user]);
       (verificationRepository.find as jest.Mock).mockResolvedValue([]);
-      (userTrustScoreRepository.findOne as jest.Mock).mockResolvedValue(null);
+      (userTrustScoreRepository.find as jest.Mock).mockResolvedValue([]);
       (userTrustScoreRepository.create as jest.Mock).mockReturnValue(
         makeUserTrustScore(),
       );
@@ -457,9 +467,9 @@ describe('TrustScoreScheduler', () => {
         makeUserTrustScore(),
       );
 
-      (userTrustScoreCalculator.calculateUserTrustScore as jest.Mock).mockReturnValue(
-        defaultScoreResult,
-      );
+      (
+        userTrustScoreCalculator.calculateUserTrustScore as jest.Mock
+      ).mockReturnValue(defaultScoreResult);
 
       await scheduler.recalculateAll();
 
@@ -493,8 +503,10 @@ describe('TrustScoreScheduler', () => {
 
       (priceRepository.find as jest.Mock).mockResolvedValue([]);
       (userRepository.find as jest.Mock).mockResolvedValue([user]);
-      (verificationRepository.find as jest.Mock).mockResolvedValue(verifications);
-      (userTrustScoreRepository.findOne as jest.Mock).mockResolvedValue(null);
+      (verificationRepository.find as jest.Mock).mockResolvedValue(
+        verifications,
+      );
+      (userTrustScoreRepository.find as jest.Mock).mockResolvedValue([]);
       (userTrustScoreRepository.create as jest.Mock).mockReturnValue(
         makeUserTrustScore(),
       );
@@ -502,9 +514,9 @@ describe('TrustScoreScheduler', () => {
         makeUserTrustScore(),
       );
 
-      (userTrustScoreCalculator.calculateUserTrustScore as jest.Mock).mockReturnValue(
-        defaultScoreResult,
-      );
+      (
+        userTrustScoreCalculator.calculateUserTrustScore as jest.Mock
+      ).mockReturnValue(defaultScoreResult);
 
       await scheduler.recalculateAll();
 
@@ -528,8 +540,10 @@ describe('TrustScoreScheduler', () => {
 
       (priceRepository.find as jest.Mock).mockResolvedValue([]);
       (userRepository.find as jest.Mock).mockResolvedValue([user]);
-      (verificationRepository.find as jest.Mock).mockResolvedValue(verifications);
-      (userTrustScoreRepository.findOne as jest.Mock).mockResolvedValue(null);
+      (verificationRepository.find as jest.Mock).mockResolvedValue(
+        verifications,
+      );
+      (userTrustScoreRepository.find as jest.Mock).mockResolvedValue([]);
       (userTrustScoreRepository.create as jest.Mock).mockReturnValue(
         makeUserTrustScore(),
       );
@@ -537,9 +551,9 @@ describe('TrustScoreScheduler', () => {
         makeUserTrustScore(),
       );
 
-      (userTrustScoreCalculator.calculateUserTrustScore as jest.Mock).mockReturnValue(
-        defaultScoreResult,
-      );
+      (
+        userTrustScoreCalculator.calculateUserTrustScore as jest.Mock
+      ).mockReturnValue(defaultScoreResult);
 
       await scheduler.recalculateAll();
 
@@ -556,7 +570,7 @@ describe('TrustScoreScheduler', () => {
       const oldDate = new Date();
       oldDate.setDate(oldDate.getDate() - 31);
 
-      const prices = [makePrice({ createdAt: oldDate })];
+      const prices = [makePrice({ createdAt: oldDate, user: user as any })];
 
       (priceRepository.find as jest.Mock)
         .mockResolvedValueOnce([]) // recalculatePriceTrustScores (verificationCount >= 10 필터)
@@ -564,7 +578,7 @@ describe('TrustScoreScheduler', () => {
 
       (userRepository.find as jest.Mock).mockResolvedValue([user]);
       (verificationRepository.find as jest.Mock).mockResolvedValue([]);
-      (userTrustScoreRepository.findOne as jest.Mock).mockResolvedValue(null);
+      (userTrustScoreRepository.find as jest.Mock).mockResolvedValue([]);
       (userTrustScoreRepository.create as jest.Mock).mockReturnValue(
         makeUserTrustScore(),
       );
@@ -572,9 +586,9 @@ describe('TrustScoreScheduler', () => {
         makeUserTrustScore(),
       );
 
-      (userTrustScoreCalculator.calculateUserTrustScore as jest.Mock).mockReturnValue(
-        defaultScoreResult,
-      );
+      (
+        userTrustScoreCalculator.calculateUserTrustScore as jest.Mock
+      ).mockReturnValue(defaultScoreResult);
 
       await scheduler.recalculateAll();
 
@@ -597,13 +611,13 @@ describe('TrustScoreScheduler', () => {
       (priceRepository.find as jest.Mock).mockResolvedValue([]);
       (userRepository.find as jest.Mock).mockResolvedValue([user]);
       (verificationRepository.find as jest.Mock).mockResolvedValue([]);
-      (userTrustScoreRepository.findOne as jest.Mock).mockResolvedValue(
-        makeUserTrustScore({ id: 'uts-1' }),
-      );
+      (userTrustScoreRepository.find as jest.Mock).mockResolvedValue([
+        makeUserTrustScore({ id: 'uts-1', user: makeUser() as any }),
+      ]);
 
-      (userTrustScoreCalculator.calculateUserTrustScore as jest.Mock).mockReturnValue(
-        fractionalResult,
-      );
+      (
+        userTrustScoreCalculator.calculateUserTrustScore as jest.Mock
+      ).mockReturnValue(fractionalResult);
 
       await scheduler.recalculateAll();
 
@@ -622,7 +636,7 @@ describe('TrustScoreScheduler', () => {
       (priceRepository.find as jest.Mock).mockResolvedValue([]);
       (userRepository.find as jest.Mock).mockResolvedValue(users);
       (verificationRepository.find as jest.Mock).mockResolvedValue([]);
-      (userTrustScoreRepository.findOne as jest.Mock).mockResolvedValue(null);
+      (userTrustScoreRepository.find as jest.Mock).mockResolvedValue([]);
       (userTrustScoreRepository.create as jest.Mock).mockReturnValue(
         makeUserTrustScore(),
       );
@@ -630,26 +644,24 @@ describe('TrustScoreScheduler', () => {
         makeUserTrustScore(),
       );
 
-      (userTrustScoreCalculator.calculateUserTrustScore as jest.Mock).mockReturnValue(
-        defaultScoreResult,
-      );
+      (
+        userTrustScoreCalculator.calculateUserTrustScore as jest.Mock
+      ).mockReturnValue(defaultScoreResult);
 
       await scheduler.recalculateAll();
 
-      expect(userTrustScoreCalculator.calculateUserTrustScore).toHaveBeenCalledTimes(3);
+      expect(
+        userTrustScoreCalculator.calculateUserTrustScore,
+      ).toHaveBeenCalledTimes(3);
       expect(userRepository.update).toHaveBeenCalledTimes(3);
     });
 
     it('최근 90일 가격 중 trustScore 있는 것의 평균을 registrationScore로 사용', async () => {
       const user = makeUser({ id: 'user-1' });
       const prices = [
-        makePrice({ trustScore: 80, createdAt: new Date() }),
-        makePrice({ id: 'price-2', trustScore: 60, createdAt: new Date() }),
-        makePrice({
-          id: 'price-3',
-          trustScore: null,
-          createdAt: new Date(),
-        }), // null은 제외
+        makePrice({ trustScore: 80, createdAt: new Date(), user: user as any }),
+        makePrice({ id: 'price-2', trustScore: 60, createdAt: new Date(), user: user as any }),
+        makePrice({ id: 'price-3', trustScore: null, createdAt: new Date(), user: user as any }), // null은 제외
       ];
 
       (priceRepository.find as jest.Mock)
@@ -658,7 +670,7 @@ describe('TrustScoreScheduler', () => {
 
       (userRepository.find as jest.Mock).mockResolvedValue([user]);
       (verificationRepository.find as jest.Mock).mockResolvedValue([]);
-      (userTrustScoreRepository.findOne as jest.Mock).mockResolvedValue(null);
+      (userTrustScoreRepository.find as jest.Mock).mockResolvedValue([]);
       (userTrustScoreRepository.create as jest.Mock).mockReturnValue(
         makeUserTrustScore(),
       );
@@ -666,9 +678,9 @@ describe('TrustScoreScheduler', () => {
         makeUserTrustScore(),
       );
 
-      (userTrustScoreCalculator.calculateUserTrustScore as jest.Mock).mockReturnValue(
-        defaultScoreResult,
-      );
+      (
+        userTrustScoreCalculator.calculateUserTrustScore as jest.Mock
+      ).mockReturnValue(defaultScoreResult);
 
       await scheduler.recalculateAll();
 

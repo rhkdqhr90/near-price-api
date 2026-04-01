@@ -20,6 +20,13 @@ export class NearbyStoreQueryDto {
   @Min(1)
   @Max(10000)
   radius: number = 3000;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @Max(100)
+  limit: number = 50;
 }
 
 export class NearbyStoreResponseDto {

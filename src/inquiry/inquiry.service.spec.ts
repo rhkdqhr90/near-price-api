@@ -34,7 +34,10 @@ function buildUser(overrides: Partial<User> = {}): User {
   return Object.assign(user, overrides);
 }
 
-function buildInquiry(user: User | null, overrides: Partial<Inquiry> = {}): Inquiry {
+function buildInquiry(
+  user: User | null,
+  overrides: Partial<Inquiry> = {},
+): Inquiry {
   const inquiry = new Inquiry();
   inquiry.id = INQUIRY_UUID;
   inquiry.user = user;

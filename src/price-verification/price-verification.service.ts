@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -29,6 +30,8 @@ const VERIFICATION_BADGE_THRESHOLDS: Record<number, string> = {
 
 @Injectable()
 export class PriceVerificationService {
+  private readonly logger = new Logger(PriceVerificationService.name);
+
   constructor(
     @InjectRepository(PriceVerification)
     private verificationRepository: Repository<PriceVerification>,
@@ -60,7 +63,8 @@ export class PriceVerificationService {
     }
 
     // 본인이 등록한 가격은 검증할 수 없음
-    if (price.user?.id === userId) {
+    // price.user가 null인 경우(계정 삭제 후 익명화) 는 검증 허용
+    if (price.user !== null && price.user.id === userId) {
       throw new ForbiddenException('본인이 등록한 가격은 검증할 수 없습니다');
     }
 
@@ -172,13 +176,17 @@ export class PriceVerificationService {
       await queryRunner.commitTransaction();
 
       // 가격 등록자에게 검증 알림 (fire-and-forget)
-      void this.sendVerificationNotification(
+      this.sendVerificationNotification(
         price.user ?? null,
         createVerificationDto.result,
+      ).catch((err: unknown) =>
+        this.logger.warn('검증 알림 전송 실패', (err as Error)?.message),
       );
 
       // 검증자 뱃지 획득 확인 및 알림 (fire-and-forget)
-      void this.checkAndNotifyBadge(userId);
+      this.checkAndNotifyBadge(userId).catch((err: unknown) =>
+        this.logger.warn('뱃지 알림 전송 실패', (err as Error)?.message),
+      );
 
       return result;
     } catch (error) {

@@ -1,18 +1,17 @@
 import {
+  BadRequestException,
   Controller,
-  Logger,
   Post,
   UploadedFile,
   UseGuards,
   UseInterceptors,
-  BadRequestException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
 import { extname } from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import multer from 'multer';
+import { fromBuffer } from 'file-type';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { UploadService } from './upload.service';
 
 const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 const ALLOWED_EXTS = ['.jpg', '.jpeg', '.png', '.webp'] as const;
@@ -20,20 +19,12 @@ const ALLOWED_EXTS = ['.jpg', '.jpeg', '.png', '.webp'] as const;
 @Controller('upload')
 @UseGuards(JwtAuthGuard)
 export class UploadController {
-  private readonly logger = new Logger(UploadController.name);
-
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly uploadService: UploadService) {}
 
   @Post()
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads',
-        filename: (_req, file, cb) => {
-          const ext = extname(file.originalname).toLowerCase();
-          cb(null, `${uuidv4()}${ext}`);
-        },
-      }),
+      storage: multer.memoryStorage(),
       limits: { fileSize: 10 * 1024 * 1024 },
       fileFilter: (_req, file, cb) => {
         if (!(ALLOWED_MIMES as readonly string[]).includes(file.mimetype)) {
@@ -57,18 +48,22 @@ export class UploadController {
       },
     }),
   )
-  upload(@UploadedFile() file: Express.Multer.File): { url: string } {
+  async upload(
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ): Promise<{ url: string }> {
     if (!file) {
       throw new BadRequestException('파일이 없습니다.');
     }
-    const baseUrl = this.configService.get<string>('BASE_URL');
-    if (!baseUrl) {
-      this.logger.warn(
-        'BASE_URL 환경변수가 설정되지 않았습니다. 기본값(http://localhost:3000)을 사용합니다.',
-      );
+
+    // Magic bytes 검증: MIME 스푸핑 방지 (실제 파일 시그니처 확인)
+    const detected = await fromBuffer(file.buffer);
+    if (
+      !detected ||
+      !(ALLOWED_MIMES as readonly string[]).includes(detected.mime)
+    ) {
+      throw new BadRequestException('허용되지 않는 파일 형식입니다.');
     }
-    return {
-      url: `${baseUrl ?? 'http://localhost:3000'}/uploads/${file.filename}`,
-    };
+
+    return this.uploadService.uploadToS3(file);
   }
 }

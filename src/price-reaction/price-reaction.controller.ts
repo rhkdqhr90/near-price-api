@@ -7,6 +7,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
@@ -30,6 +31,7 @@ export class PriceReactionController {
 
   @Post(':id/confirm')
   @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   async confirm(
     @Param('id', ParseUUIDPipe) priceId: string,
     @CurrentUser() user: AuthUser,
@@ -39,6 +41,7 @@ export class PriceReactionController {
 
   @Post(':id/report')
   @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   async report(
     @Param('id', ParseUUIDPipe) priceId: string,
     @CurrentUser() user: AuthUser,

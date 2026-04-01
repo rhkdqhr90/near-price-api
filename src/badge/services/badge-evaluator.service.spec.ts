@@ -9,9 +9,24 @@ import { BadgeCategory } from '../entities/badge-definition.entity';
 import { User, UserRole } from '../../user/entities/user.entity';
 import { PriceVerification } from '../../price-verification/entities/price-verification.entity';
 
+function makeCountQb(count: number) {
+  const qb: Record<string, jest.Mock> = {
+    leftJoin: jest.fn(),
+    select: jest.fn(),
+    where: jest.fn(),
+    getRawOne: jest.fn().mockResolvedValue({ cnt: String(count) }),
+  };
+  qb.leftJoin.mockReturnValue(qb);
+  qb.select.mockReturnValue(qb);
+  qb.where.mockReturnValue(qb);
+  return qb;
+}
+
 describe('BadgeEvaluatorService', () => {
   let service: BadgeEvaluatorService;
-  let userRepository: jest.Mocked<Pick<Repository<User>, 'findOne'>>;
+  let userRepository: jest.Mocked<
+    Pick<Repository<User>, 'findOne' | 'createQueryBuilder'>
+  >;
   let priceVerificationRepository: jest.Mocked<
     Pick<Repository<PriceVerification>, 'countBy'>
   >;
@@ -44,6 +59,7 @@ describe('BadgeEvaluatorService', () => {
           provide: getRepositoryToken(User),
           useValue: {
             findOne: jest.fn(),
+            createQueryBuilder: jest.fn(),
           },
         },
         {
@@ -81,6 +97,7 @@ describe('BadgeEvaluatorService', () => {
         ),
       };
       (userRepository.findOne as jest.Mock).mockResolvedValue(userWith10Prices);
+      (userRepository.createQueryBuilder as jest.Mock).mockReturnValue(makeCountQb(10));
       (priceVerificationRepository.countBy as jest.Mock).mockResolvedValue(0);
 
       const result = await service.getUserBadges(mockUser.id);
@@ -89,10 +106,8 @@ describe('BadgeEvaluatorService', () => {
     });
 
     it('가격 0개, 검증 0건 사용자 → earned 없음, registration_10 진행 중', async () => {
-      (userRepository.findOne as jest.Mock).mockResolvedValue({
-        ...mockUser,
-        prices: [],
-      });
+      (userRepository.findOne as jest.Mock).mockResolvedValue({ ...mockUser, prices: [] });
+      (userRepository.createQueryBuilder as jest.Mock).mockReturnValue(makeCountQb(0));
       (priceVerificationRepository.countBy as jest.Mock).mockResolvedValue(0);
 
       const result = await service.getUserBadges(mockUser.id);
@@ -102,10 +117,8 @@ describe('BadgeEvaluatorService', () => {
     });
 
     it('검증 10건 사용자 → verification_10 뱃지 획득', async () => {
-      (userRepository.findOne as jest.Mock).mockResolvedValue({
-        ...mockUser,
-        prices: [],
-      });
+      (userRepository.findOne as jest.Mock).mockResolvedValue({ ...mockUser, prices: [] });
+      (userRepository.createQueryBuilder as jest.Mock).mockReturnValue(makeCountQb(0));
       (priceVerificationRepository.countBy as jest.Mock).mockResolvedValue(10);
 
       const result = await service.getUserBadges(mockUser.id);
@@ -114,10 +127,8 @@ describe('BadgeEvaluatorService', () => {
     });
 
     it('검증 50건 사용자 → verification_10, verification_50 모두 획득', async () => {
-      (userRepository.findOne as jest.Mock).mockResolvedValue({
-        ...mockUser,
-        prices: [],
-      });
+      (userRepository.findOne as jest.Mock).mockResolvedValue({ ...mockUser, prices: [] });
+      (userRepository.createQueryBuilder as jest.Mock).mockReturnValue(makeCountQb(0));
       (priceVerificationRepository.countBy as jest.Mock).mockResolvedValue(50);
 
       const result = await service.getUserBadges(mockUser.id);
@@ -128,10 +139,8 @@ describe('BadgeEvaluatorService', () => {
     });
 
     it('prices가 undefined인 사용자 → totalRegistrations 0으로 처리', async () => {
-      (userRepository.findOne as jest.Mock).mockResolvedValue({
-        ...mockUser,
-        prices: undefined,
-      });
+      (userRepository.findOne as jest.Mock).mockResolvedValue({ ...mockUser, prices: undefined });
+      (userRepository.createQueryBuilder as jest.Mock).mockReturnValue(makeCountQb(0));
       (priceVerificationRepository.countBy as jest.Mock).mockResolvedValue(0);
 
       const result = await service.getUserBadges(mockUser.id);
@@ -144,6 +153,7 @@ describe('BadgeEvaluatorService', () => {
         trustScore: 70,
         prices: [],
       });
+      (userRepository.createQueryBuilder as jest.Mock).mockReturnValue(makeCountQb(0));
       (priceVerificationRepository.countBy as jest.Mock).mockResolvedValue(0);
 
       // trustScoreMaintainedDays 는 context에만 있으므로 getUserBadges에서는
@@ -154,10 +164,8 @@ describe('BadgeEvaluatorService', () => {
     });
 
     it('priceVerificationRepository.countBy가 올바른 조건으로 호출됨', async () => {
-      (userRepository.findOne as jest.Mock).mockResolvedValue({
-        ...mockUser,
-        prices: [],
-      });
+      (userRepository.findOne as jest.Mock).mockResolvedValue({ ...mockUser, prices: [] });
+      (userRepository.createQueryBuilder as jest.Mock).mockReturnValue(makeCountQb(0));
       (priceVerificationRepository.countBy as jest.Mock).mockResolvedValue(5);
 
       await service.getUserBadges('user-uuid-1');
@@ -167,10 +175,8 @@ describe('BadgeEvaluatorService', () => {
     });
 
     it('earned, progress 배열 형태로 반환', async () => {
-      (userRepository.findOne as jest.Mock).mockResolvedValue({
-        ...mockUser,
-        prices: [],
-      });
+      (userRepository.findOne as jest.Mock).mockResolvedValue({ ...mockUser, prices: [] });
+      (userRepository.createQueryBuilder as jest.Mock).mockReturnValue(makeCountQb(0));
       (priceVerificationRepository.countBy as jest.Mock).mockResolvedValue(0);
 
       const result = await service.getUserBadges(mockUser.id);
@@ -181,11 +187,9 @@ describe('BadgeEvaluatorService', () => {
     it('earned 항목은 type, name, icon, category 필드를 포함', async () => {
       (userRepository.findOne as jest.Mock).mockResolvedValue({
         ...mockUser,
-        prices: Array.from(
-          { length: 10 },
-          (_, i) => ({ id: `price-${i}` }) as any,
-        ),
+        prices: Array.from({ length: 10 }, (_, i) => ({ id: `price-${i}` }) as any),
       });
+      (userRepository.createQueryBuilder as jest.Mock).mockReturnValue(makeCountQb(10));
       (priceVerificationRepository.countBy as jest.Mock).mockResolvedValue(0);
 
       const result = await service.getUserBadges(mockUser.id);
@@ -200,11 +204,9 @@ describe('BadgeEvaluatorService', () => {
     it('progress 항목은 type, name, icon, category, current, threshold, progressPercent 필드를 포함', async () => {
       (userRepository.findOne as jest.Mock).mockResolvedValue({
         ...mockUser,
-        prices: Array.from(
-          { length: 5 },
-          (_, i) => ({ id: `price-${i}` }) as any,
-        ),
+        prices: Array.from({ length: 5 }, (_, i) => ({ id: `price-${i}` }) as any),
       });
+      (userRepository.createQueryBuilder as jest.Mock).mockReturnValue(makeCountQb(5));
       (priceVerificationRepository.countBy as jest.Mock).mockResolvedValue(0);
 
       const result = await service.getUserBadges(mockUser.id);
@@ -472,8 +474,12 @@ describe('BadgeEvaluatorService', () => {
         trustScore: 0,
       };
       const progress = service.evaluateProgressBadges(ctx);
-      const hasReg = progress.some((p) => p.badgeId.startsWith('registration_'));
-      const hasVer = progress.some((p) => p.badgeId.startsWith('verification_'));
+      const hasReg = progress.some((p) =>
+        p.badgeId.startsWith('registration_'),
+      );
+      const hasVer = progress.some((p) =>
+        p.badgeId.startsWith('verification_'),
+      );
       expect(hasReg).toBe(true);
       expect(hasVer).toBe(true);
     });

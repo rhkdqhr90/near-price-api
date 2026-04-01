@@ -10,6 +10,7 @@ import { AuthService } from './auth.service';
 import { User, UserRole } from '../user/entities/user.entity';
 import { UserOauth, OAuthProvider } from '../user/entities/user-oauth.entity';
 import { AuthResponseDto } from './dto/auth-response.dto';
+import { RedisService } from '../redis/redis.service';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -90,6 +91,14 @@ describe('AuthService', () => {
             transaction: jest.fn(),
           },
         },
+        {
+          provide: RedisService,
+          useValue: {
+            set: jest.fn(),
+            get: jest.fn().mockResolvedValue(null),
+            del: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -114,6 +123,7 @@ describe('AuthService', () => {
     configService.getOrThrow.mockImplementation((key: string) => {
       if (key === 'JWT_EXPIRES_IN') return '1h';
       if (key === 'JWT_REFRESH_EXPIRES_IN') return '7d';
+      if (key === 'KAKAO_API_URL') return 'https://kapi.kakao.com';
       throw new Error(`Config key not found: ${key}`);
     });
 

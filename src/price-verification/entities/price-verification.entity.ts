@@ -6,6 +6,7 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
+  Unique,
 } from 'typeorm';
 import { Price } from '../../price/entities/price.entity';
 import { User } from '../../user/entities/user.entity';
@@ -18,6 +19,7 @@ export enum VerificationResult {
 @Entity('price_verifications')
 @Index(['price'])
 @Index(['verifier'])
+@Unique(['price', 'verifier'])
 export class PriceVerification {
   @PrimaryGeneratedColumn('uuid')
   id: string;

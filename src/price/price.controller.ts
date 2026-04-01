@@ -22,6 +22,7 @@ import { UpdatePriceDto } from './dto/update-price.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { SearchPriceByNameDto } from './dto/search-price-by-name.dto';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller('price')
 export class PriceController {
@@ -29,6 +30,7 @@ export class PriceController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
+  @Throttle({ write: { limit: 10, ttl: 60000 } })
   async create(
     @CurrentUser() user: AuthUser,
     @Body() createPriceDto: CreatePriceDto,

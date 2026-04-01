@@ -58,9 +58,14 @@ export class StoreService {
   }
 
   async searchByName(name: string): Promise<StoreResponseDto[]> {
+    // LIKE 와일드카드 이스케이프 — %, _, \ 를 리터럴로 처리
+    const escaped = name.replace(/[\\%_]/g, '\\$&');
     const stores = await this.storeRepository
       .createQueryBuilder('store')
-      .where('LOWER(store.name) LIKE LOWER(:name)', { name: `%${name}%` })
+      .where('LOWER(store.name) LIKE LOWER(:name) ESCAPE :escape', {
+        name: `%${escaped}%`,
+        escape: '\\',
+      })
       .orderBy('store.name', 'ASC')
       .limit(10)
       .getMany();
@@ -82,7 +87,12 @@ export class StoreService {
   async findNearby(
     query: NearbyStoreQueryDto,
   ): Promise<NearbyStoreResponseDto[]> {
-    const { lat, lng, radius } = query;
+    const { lat, lng, radius, limit } = query;
+
+    // Bounding box 사전 필터링: 인덱스 범위 스캔으로 후보군 축소
+    const latDelta = radius / 111_000;
+    const lngDelta = radius / (111_000 * Math.cos((lat * Math.PI) / 180));
+
     const stores = await this.storeRepository
       .createQueryBuilder('store')
       .select([
@@ -101,7 +111,15 @@ export class StoreService {
         ))`,
         'distance',
       )
-      .where(
+      .where('store.latitude BETWEEN :minLat AND :maxLat', {
+        minLat: lat - latDelta,
+        maxLat: lat + latDelta,
+      })
+      .andWhere('store.longitude BETWEEN :minLng AND :maxLng', {
+        minLng: lng - lngDelta,
+        maxLng: lng + lngDelta,
+      })
+      .andWhere(
         `(6371000 * acos(
           cos(radians(:lat)) * cos(radians(store.latitude)) *
           cos(radians(store.longitude) - radians(:lng)) +
@@ -110,6 +128,7 @@ export class StoreService {
       )
       .setParameters({ lat, lng, radius })
       .orderBy('distance', 'ASC')
+      .limit(limit)
       .getRawAndEntities();
 
     // Create a map for O(1) lookup instead of O(n) find

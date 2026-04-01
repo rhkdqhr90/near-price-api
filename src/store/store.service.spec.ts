@@ -4,6 +4,8 @@ import { NotFoundException } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { StoreService } from './store.service';
 import { Store, StoreType } from './entities/store.entity';
+import { StoreReview } from './entities/store-review.entity';
+import { User } from '../user/entities/user.entity';
 import { CreateStoreDto } from './dto/create-store.dto';
 import { UpdateStoreDto } from './dto/update-store.dto';
 import { NearbyStoreQueryDto } from './dto/nearby-store.dto';
@@ -48,6 +50,7 @@ function createQueryBuilderMock(result: unknown) {
     select: jest.fn(),
     addSelect: jest.fn(),
     where: jest.fn(),
+    andWhere: jest.fn(),
     setParameters: jest.fn(),
     orderBy: jest.fn(),
     limit: jest.fn(),
@@ -59,6 +62,7 @@ function createQueryBuilderMock(result: unknown) {
   qb.select.mockReturnValue(qb);
   qb.addSelect.mockReturnValue(qb);
   qb.where.mockReturnValue(qb);
+  qb.andWhere.mockReturnValue(qb);
   qb.setParameters.mockReturnValue(qb);
   qb.orderBy.mockReturnValue(qb);
   qb.limit.mockReturnValue(qb);
@@ -85,6 +89,14 @@ describe('StoreService', () => {
         {
           provide: getRepositoryToken(Store),
           useValue: storeRepo,
+        },
+        {
+          provide: getRepositoryToken(StoreReview),
+          useValue: createMockRepository<StoreReview>(),
+        },
+        {
+          provide: getRepositoryToken(User),
+          useValue: createMockRepository<User>(),
         },
       ],
     }).compile();
@@ -189,14 +201,14 @@ describe('StoreService', () => {
         makeStore({ id: 'id-2', name: '이마트 서초점' }),
       ];
       const qb = createQueryBuilderMock(stores);
-      storeRepo.createQueryBuilder!.mockReturnValue(qb);
+      storeRepo.createQueryBuilder.mockReturnValue(qb);
 
       const result = await service.searchByName('이마트');
 
       expect(storeRepo.createQueryBuilder).toHaveBeenCalledWith('store');
       expect(qb.where).toHaveBeenCalledWith(
-        'LOWER(store.name) LIKE LOWER(:name)',
-        { name: '%이마트%' },
+        'LOWER(store.name) LIKE LOWER(:name) ESCAPE :escape',
+        { name: '%이마트%', escape: '\\' },
       );
       expect(qb.orderBy).toHaveBeenCalledWith('store.name', 'ASC');
       expect(qb.limit).toHaveBeenCalledWith(10);
@@ -206,7 +218,7 @@ describe('StoreService', () => {
 
     it('검색 결과 없음: 빈 배열을 반환한다', async () => {
       const qb = createQueryBuilderMock([]);
-      storeRepo.createQueryBuilder!.mockReturnValue(qb);
+      storeRepo.createQueryBuilder.mockReturnValue(qb);
 
       const result = await service.searchByName('존재하지않는매장');
 
@@ -215,13 +227,13 @@ describe('StoreService', () => {
 
     it('검색어에 % 이스케이프 없이 LIKE 패턴을 구성한다', async () => {
       const qb = createQueryBuilderMock([]);
-      storeRepo.createQueryBuilder!.mockReturnValue(qb);
+      storeRepo.createQueryBuilder.mockReturnValue(qb);
 
       await service.searchByName('편의점');
 
       expect(qb.where).toHaveBeenCalledWith(
-        'LOWER(store.name) LIKE LOWER(:name)',
-        { name: '%편의점%' },
+        'LOWER(store.name) LIKE LOWER(:name) ESCAPE :escape',
+        { name: '%편의점%', escape: '\\' },
       );
     });
   });
@@ -263,6 +275,7 @@ describe('StoreService', () => {
       lat: 37.5665,
       lng: 126.978,
       radius: 1000,
+      limit: 50,
     };
 
     it('정상 조회: 반경 내 매장을 거리 순으로 반환한다', async () => {
@@ -278,7 +291,7 @@ describe('StoreService', () => {
       };
 
       const qb = createQueryBuilderMock(rawAndEntities);
-      storeRepo.createQueryBuilder!.mockReturnValue(qb);
+      storeRepo.createQueryBuilder.mockReturnValue(qb);
 
       const result = await service.findNearby(query);
 
@@ -299,7 +312,7 @@ describe('StoreService', () => {
     it('반경 내 매장 없음: 빈 배열을 반환한다', async () => {
       const rawAndEntities = { raw: [], entities: [] };
       const qb = createQueryBuilderMock(rawAndEntities);
-      storeRepo.createQueryBuilder!.mockReturnValue(qb);
+      storeRepo.createQueryBuilder.mockReturnValue(qb);
 
       const result = await service.findNearby(query);
 
@@ -318,7 +331,7 @@ describe('StoreService', () => {
       };
 
       const qb = createQueryBuilderMock(rawAndEntities);
-      storeRepo.createQueryBuilder!.mockReturnValue(qb);
+      storeRepo.createQueryBuilder.mockReturnValue(qb);
 
       const result = await service.findNearby(query);
 
@@ -333,7 +346,7 @@ describe('StoreService', () => {
         entities: [store],
       };
       const qb = createQueryBuilderMock(rawAndEntities);
-      storeRepo.createQueryBuilder!.mockReturnValue(qb);
+      storeRepo.createQueryBuilder.mockReturnValue(qb);
 
       const result = await service.findNearby(query);
 
@@ -354,7 +367,7 @@ describe('StoreService', () => {
         entities: [store],
       };
       const qb = createQueryBuilderMock(rawAndEntities);
-      storeRepo.createQueryBuilder!.mockReturnValue(qb);
+      storeRepo.createQueryBuilder.mockReturnValue(qb);
 
       const result = await service.findNearby(query);
 

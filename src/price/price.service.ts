@@ -1,6 +1,7 @@
 import {
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -21,6 +22,8 @@ import { ProductPriceCardDto } from './dto/product-price-card.dto';
 
 @Injectable()
 export class PriceService {
+  private readonly logger = new Logger(PriceService.name);
+
   constructor(
     @InjectRepository(Price)
     private readonly priceRepository: Repository<Price>,
@@ -78,7 +81,9 @@ export class PriceService {
       product.name,
       saved.price,
       userId,
-    ).catch(() => undefined);
+    ).catch((err: unknown) =>
+      this.logger.warn('찜 알림 전송 실패', (err as Error)?.message),
+    );
 
     return PriceResponseDto.from(saved);
   }
@@ -94,22 +99,32 @@ export class PriceService {
       relations: ['user'],
     });
 
-    await Promise.all(
-      wishlists
-        .filter(
-          (w) =>
-            w.user?.id !== registeredByUserId &&
-            w.user?.fcmToken != null &&
-            w.user?.notifPriceChange,
-        )
-        .map((w) =>
-          this.notificationService.sendToUser(
-            w.user.fcmToken!,
-            '찜한 상품 새 가격',
-            `"${productName}" 가격이 새로 등록됐어요: ${price.toLocaleString()}원`,
-          ),
-        ),
+    const tokens = wishlists
+      .filter(
+        (w) =>
+          w.user?.id !== registeredByUserId &&
+          w.user?.fcmToken != null &&
+          w.user?.notifPriceChange,
+      )
+      .map((w) => w.user.fcmToken!);
+
+    if (tokens.length === 0) return;
+
+    const failedTokens = await this.notificationService.sendToMany(
+      tokens,
+      '찜한 상품 새 가격',
+      `"${productName}" 가격이 새로 등록됐어요: ${price.toLocaleString()}원`,
     );
+
+    // 만료/무효 토큰 정리
+    if (failedTokens.length > 0) {
+      await this.userRepository
+        .createQueryBuilder()
+        .update(User)
+        .set({ fcmToken: null })
+        .where('fcm_token IN (:...tokens)', { tokens: failedTokens })
+        .execute();
+    }
   }
 
   async findRecent(
@@ -341,8 +356,9 @@ export class PriceService {
       .leftJoinAndSelect('price.store', 'store')
       .leftJoinAndSelect('price.product', 'product')
       .leftJoinAndSelect('price.user', 'user')
-      .where('LOWER(TRIM(product.name)) LIKE LOWER(:pattern)', {
-        pattern: `%${trimmed}%`,
+      .where('LOWER(TRIM(product.name)) LIKE LOWER(:pattern) ESCAPE :escape', {
+        pattern: `%${trimmed.replace(/%/g, '\\%').replace(/_/g, '\\_')}%`,
+        escape: '\\',
       })
       .andWhere('price.isActive = :isActive', { isActive: true })
       .orderBy('price.price', 'ASC')

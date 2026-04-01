@@ -22,6 +22,7 @@ import { UpdateNicknameDto } from './dto/update-nickname.dto';
 import { CheckNicknameDto } from './dto/check-nickname.dto';
 import { UpdateNotificationSettingsDto } from './dto/update-notification-settings.dto';
 import { UpdateFcmTokenDto } from './dto/update-fcm-token.dto';
+import { MyProfileResponseDto } from './dto/my-profile-response.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @Controller('user')
@@ -50,7 +51,15 @@ export class UserController {
     return { available };
   }
 
-  // Public profile: sensitive fields excluded (email, fcmToken)
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  async getMe(
+    @CurrentUser() requestUser: AuthUser,
+  ): Promise<MyProfileResponseDto> {
+    return await this.userService.findMe(requestUser.userId);
+  }
+
+  // 타인 프로필 조회: 민감 필드 제외 (email, fcmToken 등). 인증 필수 (앱은 OAuth 로그인 전용)
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   async findOne(@Param('id', ParseUUIDPipe) id: string) {

@@ -29,47 +29,6 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # Redis 캐싱 및 세션 저장소
-  redis:
-    image: redis:7-alpine
-    container_name: near-price-redis
-    command: redis-server --requirepass ${REDIS_PASSWORD:-your-secure-password} --maxmemory 512mb --maxmemory-policy allkeys-lru
-    volumes:
-      # Redis 데이터 영속성
-      - redis_data:/data
-    ports:
-      # 외부 접근 불가능 (docker 네트워크에서만 접근)
-      - "127.0.0.1:6379:6379"
-    networks:
-      - near-price-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  # Elasticsearch (검색 기능)
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-    container_name: near-price-elasticsearch
-    environment:
-      discovery.type: single-node
-      xpack.security.enabled: false
-      "ES_JAVA_OPTS": "-Xms512m -Xmx512m"
-    volumes:
-      - elasticsearch_data:/usr/share/elasticsearch/data
-    ports:
-      - "127.0.0.1:9200:9200"
-    networks:
-      - near-price-network
-    healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:9200 >/dev/null || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
   # NestJS API 서버 (3개 인스턴스 로드밸런싱)
   api-1:
     build:
@@ -84,22 +43,16 @@ services:
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_DATABASE: ${DB_DATABASE}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
-      ELASTICSEARCH_NODE: http://elasticsearch:9200
+      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
       CORS_ORIGIN: ${CORS_ORIGIN}
       KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY}
       KAKAO_API_URL: ${KAKAO_API_URL}
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      elasticsearch:
         condition: service_healthy
     networks:
       - near-price-network
@@ -118,22 +71,16 @@ services:
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_DATABASE: ${DB_DATABASE}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
-      ELASTICSEARCH_NODE: http://elasticsearch:9200
+      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
       CORS_ORIGIN: ${CORS_ORIGIN}
       KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY}
       KAKAO_API_URL: ${KAKAO_API_URL}
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      elasticsearch:
         condition: service_healthy
     networks:
       - near-price-network
@@ -152,22 +99,16 @@ services:
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_DATABASE: ${DB_DATABASE}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
-      ELASTICSEARCH_NODE: http://elasticsearch:9200
+      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
       CORS_ORIGIN: ${CORS_ORIGIN}
       KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY}
       KAKAO_API_URL: ${KAKAO_API_URL}
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      elasticsearch:
         condition: service_healthy
     networks:
       - near-price-network
@@ -197,10 +138,6 @@ services:
 
 volumes:
   postgres_data:
-    driver: local
-  redis_data:
-    driver: local
-  elasticsearch_data:
     driver: local
 
 networks:

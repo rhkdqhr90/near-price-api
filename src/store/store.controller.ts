@@ -11,6 +11,7 @@ import {
   UseGuards,
   BadRequestException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -30,6 +31,7 @@ export class StoreController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
+  @Throttle({ write: { limit: 10, ttl: 60000 } })
   async create(@Body() createStoreDto: CreateStoreDto) {
     return await this.storeService.create(createStoreDto);
   }
@@ -40,6 +42,7 @@ export class StoreController {
   }
 
   @Get('search')
+  @Throttle({ search: { limit: 30, ttl: 60000 } })
   async searchByName(@Query('name') name: string) {
     if (!name || name.trim().length < 1) return [];
     if (name.length > 100)
@@ -68,6 +71,7 @@ export class StoreController {
 
   @Post(':id/reviews')
   @UseGuards(JwtAuthGuard)
+  @Throttle({ write: { limit: 5, ttl: 60000 } })
   async addReview(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: AuthUser,

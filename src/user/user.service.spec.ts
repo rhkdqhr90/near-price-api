@@ -12,6 +12,7 @@ import { User, UserRole } from './entities/user.entity';
 import { UserOauth } from './entities/user-oauth.entity';
 import { Price } from '../price/entities/price.entity';
 import { UserResponseDto } from './dto/user-response.dto';
+import { MyProfileResponseDto } from './dto/my-profile-response.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import type { AuthUser } from '../auth/types/auth-user.type';
@@ -71,8 +72,10 @@ function makeQueryBuilder() {
 }
 
 // ─── Repository Mock 타입 ────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type MockRepository<_T = any> = Partial<Record<keyof Repository<any>, jest.Mock>>;
+
+type MockRepository<_T = any> = Partial<
+  Record<keyof Repository<any>, jest.Mock>
+>;
 
 function createMockRepository<T>(): MockRepository<T> {
   return {
@@ -151,7 +154,10 @@ describe('UserService', () => {
   // ─────────────────────────────────────────────────────────────────────────
   describe('findAll', () => {
     it('유저 목록을 PaginatedResponseDto로 반환한다', async () => {
-      const users = [makeUser(), makeUser({ id: 'user-id-2', email: 'b@b.com', nickname: 'b' })];
+      const users = [
+        makeUser(),
+        makeUser({ id: 'user-id-2', email: 'b@b.com', nickname: 'b' }),
+      ];
       userRepo.findAndCount!.mockResolvedValue([users, 2]);
 
       const result = await service.findAll({ page: 1, limit: 20 });
@@ -173,6 +179,46 @@ describe('UserService', () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
+  // findMe
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('findMe', () => {
+    it('존재하는 유저를 MyProfileResponseDto로 반환한다 (email, profileImageUrl 포함)', async () => {
+      const user = makeUser({
+        email: 'me@example.com',
+        profileImageUrl: 'https://img.example.com/me.jpg',
+      });
+      userRepo.findOne!.mockResolvedValue(user);
+
+      const result = await service.findMe('user-id-1');
+
+      expect(userRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 'user-id-1' },
+      });
+      expect(result).toBeInstanceOf(MyProfileResponseDto);
+      expect(result.id).toBe('user-id-1');
+      expect(result.email).toBe('me@example.com');
+      expect(result.profileImageUrl).toBe('https://img.example.com/me.jpg');
+    });
+
+    it('존재하지 않는 유저면 NotFoundException을 던진다', async () => {
+      userRepo.findOne!.mockResolvedValue(null);
+
+      await expect(service.findMe('non-existent')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('profileImageUrl이 null이면 null을 반환한다', async () => {
+      const user = makeUser({ profileImageUrl: null });
+      userRepo.findOne!.mockResolvedValue(user);
+
+      const result = await service.findMe('user-id-1');
+
+      expect(result.profileImageUrl).toBeNull();
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
   // findOne
   // ─────────────────────────────────────────────────────────────────────────
   describe('findOne', () => {
@@ -182,7 +228,9 @@ describe('UserService', () => {
 
       const result = await service.findOne('user-id-1');
 
-      expect(userRepo.findOne).toHaveBeenCalledWith({ where: { id: 'user-id-1' } });
+      expect(userRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 'user-id-1' },
+      });
       expect(result).toBeInstanceOf(UserResponseDto);
       expect(result.id).toBe('user-id-1');
     });
@@ -190,7 +238,9 @@ describe('UserService', () => {
     it('존재하지 않는 유저면 NotFoundException을 던진다', async () => {
       userRepo.findOne!.mockResolvedValue(null);
 
-      await expect(service.findOne('non-existent')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('non-existent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -204,7 +254,9 @@ describe('UserService', () => {
 
       const result = await service.findByEmail('test@example.com');
 
-      expect(userRepo.findOne).toHaveBeenCalledWith({ where: { email: 'test@example.com' } });
+      expect(userRepo.findOne).toHaveBeenCalledWith({
+        where: { email: 'test@example.com' },
+      });
       expect(result).toBe(user);
     });
 
@@ -251,18 +303,18 @@ describe('UserService', () => {
     it('본인이 아니고 ADMIN도 아니면 ForbiddenException을 던진다', async () => {
       const requestUser = makeAuthUser({ userId: 'different-user' });
 
-      await expect(service.update('user-id-1', updateDto, requestUser)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.update('user-id-1', updateDto, requestUser),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('유저가 존재하지 않으면 NotFoundException을 던진다', async () => {
       userRepo.findOne!.mockResolvedValue(null);
       const requestUser = makeAuthUser();
 
-      await expect(service.update('user-id-1', updateDto, requestUser)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.update('user-id-1', updateDto, requestUser),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -283,7 +335,9 @@ describe('UserService', () => {
     it('존재하지 않는 유저면 NotFoundException을 던진다', async () => {
       userRepo.findOne!.mockResolvedValue(null);
 
-      await expect(service.remove('non-existent')).rejects.toThrow(NotFoundException);
+      await expect(service.remove('non-existent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -315,11 +369,16 @@ describe('UserService', () => {
     it('정상적으로 닉네임을 변경한다', async () => {
       const user = makeUser({ nicknameChangedAt: null });
       const saved = makeUser({ nickname: 'newnick' });
-      userRepo.findOne!.mockResolvedValueOnce(user) // findOne for user
+      userRepo
+        .findOne!.mockResolvedValueOnce(user) // findOne for user
         .mockResolvedValueOnce(null); // checkNicknameAvailable
       userRepo.save!.mockResolvedValue(saved);
 
-      const result = await service.updateNickname('user-id-1', 'newnick', makeAuthUser());
+      const result = await service.updateNickname(
+        'user-id-1',
+        'newnick',
+        makeAuthUser(),
+      );
 
       expect(result).toBeInstanceOf(UserResponseDto);
       expect(result.nickname).toBe('newnick');
@@ -371,11 +430,14 @@ describe('UserService', () => {
       const oldChange = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000); // 4일 전
       const user = makeUser({ nicknameChangedAt: oldChange });
       const saved = makeUser({ nickname: 'newnick' });
-      userRepo.findOne!.mockResolvedValueOnce(user)
-        .mockResolvedValueOnce(null); // checkNicknameAvailable
+      userRepo.findOne!.mockResolvedValueOnce(user).mockResolvedValueOnce(null); // checkNicknameAvailable
       userRepo.save!.mockResolvedValue(saved);
 
-      const result = await service.updateNickname('user-id-1', 'newnick', makeAuthUser());
+      const result = await service.updateNickname(
+        'user-id-1',
+        'newnick',
+        makeAuthUser(),
+      );
 
       expect(result).toBeInstanceOf(UserResponseDto);
     });
@@ -392,7 +454,8 @@ describe('UserService', () => {
     it('이미 사용 중인 닉네임이면 ConflictException을 던진다', async () => {
       const user = makeUser();
       // 첫 번째 findOne: 유저 조회, 두 번째 findOne: checkNicknameAvailable
-      userRepo.findOne!.mockResolvedValueOnce(user)
+      userRepo
+        .findOne!.mockResolvedValueOnce(user)
         .mockResolvedValueOnce(makeUser({ id: 'other-id', nickname: 'taken' }));
 
       await expect(
@@ -407,7 +470,11 @@ describe('UserService', () => {
       userRepo.findOne!.mockResolvedValueOnce(user);
       userRepo.save!.mockResolvedValue(saved);
 
-      const result = await service.updateNickname('user-id-1', 'testnick', makeAuthUser());
+      const result = await service.updateNickname(
+        'user-id-1',
+        'testnick',
+        makeAuthUser(),
+      );
 
       expect(result).toBeInstanceOf(UserResponseDto);
       // findOne이 1번만 호출됐는지 확인 (중복체크 스킵)
@@ -417,8 +484,7 @@ describe('UserService', () => {
     it('ADMIN은 다른 유저 닉네임을 변경할 수 있다', async () => {
       const user = makeUser({ id: 'other-id', nickname: 'oldnick' });
       const saved = makeUser({ id: 'other-id', nickname: 'newnick' });
-      userRepo.findOne!.mockResolvedValueOnce(user)
-        .mockResolvedValueOnce(null);
+      userRepo.findOne!.mockResolvedValueOnce(user).mockResolvedValueOnce(null);
       userRepo.save!.mockResolvedValue(saved);
 
       const admin = makeAuthUser({ userId: 'admin-id', role: UserRole.ADMIN });
@@ -435,9 +501,15 @@ describe('UserService', () => {
     it('본인 FCM 토큰을 업데이트하면 success: true를 반환한다', async () => {
       userRepo.update!.mockResolvedValue({ affected: 1 });
 
-      const result = await service.updateFcmToken('user-id-1', 'new-token', makeAuthUser());
+      const result = await service.updateFcmToken(
+        'user-id-1',
+        'new-token',
+        makeAuthUser(),
+      );
 
-      expect(userRepo.update).toHaveBeenCalledWith('user-id-1', { fcmToken: 'new-token' });
+      expect(userRepo.update).toHaveBeenCalledWith('user-id-1', {
+        fcmToken: 'new-token',
+      });
       expect(result).toEqual({ success: true });
     });
 
@@ -486,7 +558,11 @@ describe('UserService', () => {
       const requestUser = makeAuthUser({ userId: 'other-user' });
 
       await expect(
-        service.updateNotificationSettings('user-id-1', { notifPromotion: true }, requestUser),
+        service.updateNotificationSettings(
+          'user-id-1',
+          { notifPromotion: true },
+          requestUser,
+        ),
       ).rejects.toThrow(ForbiddenException);
     });
   });
@@ -534,7 +610,9 @@ describe('UserService', () => {
       expect(manager.createQueryBuilder).toHaveBeenCalled();
       expect(qb.update).toHaveBeenCalledWith(Price);
       expect(qb.set).toHaveBeenCalledWith({ user: null });
-      expect(qb.where).toHaveBeenCalledWith('user_id = :userId', { userId: 'user-id-1' });
+      expect(qb.where).toHaveBeenCalledWith('user_id = :userId', {
+        userId: 'user-id-1',
+      });
       expect(qb.execute).toHaveBeenCalled();
     });
 
@@ -549,7 +627,9 @@ describe('UserService', () => {
 
       await service.deleteAccount('user-id-1', makeAuthUser());
 
-      expect(manager.delete).toHaveBeenCalledWith(UserOauth, { user: { id: 'user-id-1' } });
+      expect(manager.delete).toHaveBeenCalledWith(UserOauth, {
+        user: { id: 'user-id-1' },
+      });
     });
 
     it('트랜잭션 내 User를 삭제한다', async () => {
@@ -590,23 +670,27 @@ describe('UserService', () => {
 
       await service.deleteAccount('user-id-1', makeAuthUser());
 
-      expect(callOrder).toEqual(['price-anonymize', 'oauth-delete', 'user-delete']);
+      expect(callOrder).toEqual([
+        'price-anonymize',
+        'oauth-delete',
+        'user-delete',
+      ]);
     });
 
     it('타인 계정을 삭제하려 하면 ForbiddenException을 던진다', async () => {
       const requestUser = makeAuthUser({ userId: 'other-user' });
 
-      await expect(service.deleteAccount('user-id-1', requestUser)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.deleteAccount('user-id-1', requestUser),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('ForbiddenException 시 userRepository.findOne을 호출하지 않는다', async () => {
       const requestUser = makeAuthUser({ userId: 'other-user' });
 
-      await expect(service.deleteAccount('user-id-1', requestUser)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.deleteAccount('user-id-1', requestUser),
+      ).rejects.toThrow(ForbiddenException);
 
       expect(userRepo.findOne).not.toHaveBeenCalled();
     });
@@ -614,17 +698,17 @@ describe('UserService', () => {
     it('존재하지 않는 계정이면 NotFoundException을 던진다', async () => {
       userRepo.findOne!.mockResolvedValue(null);
 
-      await expect(service.deleteAccount('user-id-1', makeAuthUser())).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.deleteAccount('user-id-1', makeAuthUser()),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('NotFoundException 시 트랜잭션을 시작하지 않는다', async () => {
       userRepo.findOne!.mockResolvedValue(null);
 
-      await expect(service.deleteAccount('user-id-1', makeAuthUser())).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.deleteAccount('user-id-1', makeAuthUser()),
+      ).rejects.toThrow(NotFoundException);
 
       expect(mockDataSource.transaction).not.toHaveBeenCalled();
     });
@@ -633,11 +717,13 @@ describe('UserService', () => {
       const user = makeUser();
       userRepo.findOne!.mockResolvedValue(user);
 
-      mockDataSource.transaction.mockRejectedValue(new Error('DB connection error'));
-
-      await expect(service.deleteAccount('user-id-1', makeAuthUser())).rejects.toThrow(
-        'DB connection error',
+      mockDataSource.transaction.mockRejectedValue(
+        new Error('DB connection error'),
       );
+
+      await expect(
+        service.deleteAccount('user-id-1', makeAuthUser()),
+      ).rejects.toThrow('DB connection error');
     });
 
     it('반환값은 void (undefined)', async () => {

@@ -32,7 +32,9 @@ function makeQbMock(manyAndCount: [PriceVerification[], number]) {
 }
 
 // QueryRunner mock 헬퍼
-function makeQueryRunnerMock(existingVerification: PriceVerification | null = null) {
+function makeQueryRunnerMock(
+  existingVerification: PriceVerification | null = null,
+) {
   const innerQb = {
     update: jest.fn().mockReturnThis(),
     set: jest.fn().mockReturnThis(),
@@ -261,8 +263,7 @@ describe('PriceVerificationService', () => {
       const callArgs = qr.manager.findOne.mock.calls[0][1] as {
         where: { createdAt: ReturnType<typeof MoreThan> };
       };
-      const since24hValue = callArgs.where.createdAt
-        .value as unknown as Date;
+      const since24hValue = callArgs.where.createdAt.value as Date;
       const expectedSince24h = new Date(beforeCall - 24 * 60 * 60 * 1000);
       const expectedSince24hAfter = new Date(afterCall - 24 * 60 * 60 * 1000);
       // since24h가 24시간 전과 가까운지 확인 (±5초 오차 허용)
@@ -357,7 +358,11 @@ describe('PriceVerificationService', () => {
     });
 
     it('맞아요 검증 성공 → confirmedCount atomic 증가 (QueryBuilder execute 호출)', async () => {
-      const priceWithCounts = { ...mockPrice, confirmedCount: 2, verificationCount: 2 };
+      const priceWithCounts = {
+        ...mockPrice,
+        confirmedCount: 2,
+        verificationCount: 2,
+      };
       priceRepository.findOne.mockResolvedValue(priceWithCounts);
       userRepository.findOne.mockResolvedValue(mockVerifier);
 
@@ -387,7 +392,11 @@ describe('PriceVerificationService', () => {
     });
 
     it('달라요 검증 성공 → disputedCount atomic 증가 (QueryBuilder execute 호출)', async () => {
-      const priceWithCounts = { ...mockPrice, disputedCount: 1, verificationCount: 1 };
+      const priceWithCounts = {
+        ...mockPrice,
+        disputedCount: 1,
+        verificationCount: 1,
+      };
       priceRepository.findOne.mockResolvedValue(priceWithCounts);
       userRepository.findOne.mockResolvedValue(mockVerifier);
 
@@ -403,7 +412,11 @@ describe('PriceVerificationService', () => {
         newPrice: null,
         createdAt: new Date(),
       };
-      const savedNewPrice: Price = { ...mockPrice, id: 'new-price-uuid', price: 1500 };
+      const savedNewPrice: Price = {
+        ...mockPrice,
+        id: 'new-price-uuid',
+        price: 1500,
+      };
 
       qr.manager.create
         .mockReturnValueOnce(savedVerification)
@@ -505,7 +518,10 @@ describe('PriceVerificationService', () => {
     });
 
     it('가격 등록자에게 FCM 알림 전송 시도 (fire-and-forget)', async () => {
-      const ownerWithToken: User = { ...mockOwner, fcmToken: 'owner-fcm-token' };
+      const ownerWithToken: User = {
+        ...mockOwner,
+        fcmToken: 'owner-fcm-token',
+      };
       const priceWithOwner: Price = { ...mockPrice, user: ownerWithToken };
       priceRepository.findOne.mockResolvedValue(priceWithOwner);
       verificationRepository.findOne.mockResolvedValue(null);
@@ -794,7 +810,11 @@ describe('PriceVerificationService', () => {
         },
         {
           id: 'v-3',
-          price: { ...mockPrice, product: { id: 'p-1', name: '과자' } as any, store: null as any },
+          price: {
+            ...mockPrice,
+            product: { id: 'p-1', name: '과자' } as any,
+            store: null as any,
+          },
           verifier: mockVerifier,
           result: VerificationResult.CONFIRMED,
           actualPrice: null,
@@ -1041,7 +1061,9 @@ describe('PriceVerificationService', () => {
     }
 
     beforeEach(() => {
-      (userRepository.update as jest.Mock) = jest.fn().mockResolvedValue({ affected: 1 });
+      (userRepository.update as jest.Mock) = jest
+        .fn()
+        .mockResolvedValue({ affected: 1 });
     });
 
     it('CONFIRMED 3건 / 전체 5건 → 점수 60', async () => {
@@ -1056,7 +1078,9 @@ describe('PriceVerificationService', () => {
 
       await service.recalculateTrustScore(USER_ID);
 
-      expect(userRepository.update).toHaveBeenCalledWith(USER_ID, { trustScore: 60 });
+      expect(userRepository.update).toHaveBeenCalledWith(USER_ID, {
+        trustScore: 60,
+      });
     });
 
     it('전체 0건 → 점수 50 (기본값)', async () => {
@@ -1064,7 +1088,9 @@ describe('PriceVerificationService', () => {
 
       await service.recalculateTrustScore(USER_ID);
 
-      expect(userRepository.update).toHaveBeenCalledWith(USER_ID, { trustScore: 50 });
+      expect(userRepository.update).toHaveBeenCalledWith(USER_ID, {
+        trustScore: 50,
+      });
     });
 
     it('모두 CONFIRMED → 점수 100', async () => {
@@ -1077,7 +1103,9 @@ describe('PriceVerificationService', () => {
 
       await service.recalculateTrustScore(USER_ID);
 
-      expect(userRepository.update).toHaveBeenCalledWith(USER_ID, { trustScore: 100 });
+      expect(userRepository.update).toHaveBeenCalledWith(USER_ID, {
+        trustScore: 100,
+      });
     });
 
     it('모두 DISPUTED → 점수 0', async () => {
@@ -1089,7 +1117,9 @@ describe('PriceVerificationService', () => {
 
       await service.recalculateTrustScore(USER_ID);
 
-      expect(userRepository.update).toHaveBeenCalledWith(USER_ID, { trustScore: 0 });
+      expect(userRepository.update).toHaveBeenCalledWith(USER_ID, {
+        trustScore: 0,
+      });
     });
 
     it('CONFIRMED 1건 / 전체 3건 → 점수 33 (Math.round)', async () => {
@@ -1102,7 +1132,9 @@ describe('PriceVerificationService', () => {
 
       await service.recalculateTrustScore(USER_ID);
 
-      expect(userRepository.update).toHaveBeenCalledWith(USER_ID, { trustScore: 33 });
+      expect(userRepository.update).toHaveBeenCalledWith(USER_ID, {
+        trustScore: 33,
+      });
     });
 
     it('최근 90일 기준 MoreThan 조건으로 verificationRepository.find 호출', async () => {
@@ -1125,9 +1157,11 @@ describe('PriceVerificationService', () => {
       const callArgs = verificationRepository.find.mock.calls[0][0] as {
         where: { createdAt: ReturnType<typeof MoreThan> };
       };
-      const since90dValue = callArgs.where.createdAt.value as unknown as Date;
+      const since90dValue = callArgs.where.createdAt.value as Date;
       const expected90dAgo = new Date(beforeCall - 90 * 24 * 60 * 60 * 1000);
-      const expected90dAgoAfter = new Date(afterCall - 90 * 24 * 60 * 60 * 1000);
+      const expected90dAgoAfter = new Date(
+        afterCall - 90 * 24 * 60 * 60 * 1000,
+      );
       expect(since90dValue.getTime()).toBeGreaterThanOrEqual(
         expected90dAgo.getTime() - 5000,
       );
@@ -1151,7 +1185,9 @@ describe('PriceVerificationService', () => {
 
       await service.recalculateTrustScore(USER_ID);
 
-      expect(userRepository.update).toHaveBeenCalledWith(USER_ID, { trustScore: 100 });
+      expect(userRepository.update).toHaveBeenCalledWith(USER_ID, {
+        trustScore: 100,
+      });
     });
 
     it('userRepository.update를 정확히 1번 호출', async () => {

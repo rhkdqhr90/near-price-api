@@ -1,9 +1,10 @@
-import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsString, MaxLength } from 'class-validator';
 import { ProductCategory, UnitType } from '../entities/product.entity';
 
 export class CreateProductDto {
   @IsNotEmpty()
   @IsString()
+  @MaxLength(200)
   name: string;
 
   @IsEnum(ProductCategory)

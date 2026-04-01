@@ -31,7 +31,10 @@ function buildUser(overrides: Partial<User> = {}): User {
   return Object.assign(user, overrides);
 }
 
-function buildTrustScore(user: User, overrides: Partial<UserTrustScore> = {}): UserTrustScore {
+function buildTrustScore(
+  user: User,
+  overrides: Partial<UserTrustScore> = {},
+): UserTrustScore {
   const ts = new UserTrustScore();
   ts.id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
   ts.user = user;
@@ -89,7 +92,9 @@ describe('BadgeService', () => {
 
       const result = await service.getUserTrustScore(USER_UUID);
 
-      expect(userRepo.findOne).toHaveBeenCalledWith({ where: { id: USER_UUID } });
+      expect(userRepo.findOne).toHaveBeenCalledWith({
+        where: { id: USER_UUID },
+      });
       expect(trustScoreRepo.findOne).toHaveBeenCalledWith({
         where: { user: { id: USER_UUID } },
       });

@@ -5,12 +5,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, QueryFailedError, Repository } from 'typeorm';
+import { DB_ERROR_CODES } from '../common/constants/db-error-codes';
 import { User, UserRole } from './entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
+import { MyProfileResponseDto } from './dto/my-profile-response.dto';
 import type { AuthUser } from '../auth/types/auth-user.type';
 import { containsBannedWords } from '../common/constants/banned-words';
 import { Price } from '../price/entities/price.entity';
@@ -50,6 +52,14 @@ export class UserService {
       page,
       limit,
     );
+  }
+
+  async findMe(userId: string): Promise<MyProfileResponseDto> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException(`User #${userId} not found`);
+    }
+    return MyProfileResponseDto.from(user);
   }
 
   async findOne(id: string): Promise<UserResponseDto> {
@@ -146,8 +156,19 @@ export class UserService {
 
     user.nickname = nickname;
     user.nicknameChangedAt = new Date();
-    const saved = await this.userRepository.save(user);
-    return UserResponseDto.from(saved);
+    try {
+      const saved = await this.userRepository.save(user);
+      return UserResponseDto.from(saved);
+    } catch (e) {
+      if (
+        e instanceof QueryFailedError &&
+        (e as QueryFailedError & { code: string }).code ===
+          DB_ERROR_CODES.UNIQUE_VIOLATION
+      ) {
+        throw new ConflictException('이미 사용 중인 닉네임입니다.');
+      }
+      throw e;
+    }
   }
 
   async updateFcmToken(id: string, fcmToken: string, requestUser: AuthUser) {

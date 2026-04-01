@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
   Unique,
@@ -16,9 +17,11 @@ export class StoreReview {
   id: string;
 
   @ManyToOne(() => Store, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'store_id' })
   store: Store;
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
   user: User;
 
   @Column({ type: 'int' })

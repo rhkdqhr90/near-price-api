@@ -64,6 +64,7 @@ function createMockQueryBuilder(getMany: jest.Mock) {
     leftJoinAndSelect: jest.fn(),
     where: jest.fn(),
     orderBy: jest.fn(),
+    addOrderBy: jest.fn(),
     getMany,
   };
   // 모든 체이닝 메서드가 자기 자신을 반환
@@ -71,6 +72,7 @@ function createMockQueryBuilder(getMany: jest.Mock) {
   qb.leftJoinAndSelect.mockReturnValue(qb);
   qb.where.mockReturnValue(qb);
   qb.orderBy.mockReturnValue(qb);
+  qb.addOrderBy.mockReturnValue(qb);
   return qb;
 }
 
@@ -225,23 +227,23 @@ describe('WishlistService', () => {
   });
 
   describe('findByUser()', () => {
-    it('user 없음: NotFoundException을 던진다', async () => {
-      userRepo.findOne!.mockResolvedValue(null);
-
-      await expect(service.findByUser(USER_ID)).rejects.toThrow(
-        NotFoundException,
-      );
-      await expect(service.findByUser(USER_ID)).rejects.toThrow(
-        '존재하지 않는 사용자입니다.',
+    it('user ID가 없는 경우: 빈 찜목록을 반환한다 (JWT 인증된 userId는 항상 유효)', async () => {
+      const getManyMock = jest.fn().mockResolvedValue([]);
+      wishlistRepo.createQueryBuilder!.mockReturnValue(
+        createMockQueryBuilder(getManyMock),
       );
 
-      expect(wishlistRepo.createQueryBuilder).not.toHaveBeenCalled();
+      const result = await service.findByUser(USER_ID);
+
+      expect(result.items).toEqual([]);
+      expect(result.totalCount).toBe(0);
     });
 
     it('빈 찜목록: items가 빈 배열이고 totalCount가 0인 응답을 반환한다', async () => {
       const getManyMock = jest.fn().mockResolvedValue([]);
-      userRepo.findOne!.mockResolvedValue(makeUser());
-      wishlistRepo.createQueryBuilder!.mockReturnValue(createMockQueryBuilder(getManyMock));
+      wishlistRepo.createQueryBuilder!.mockReturnValue(
+        createMockQueryBuilder(getManyMock),
+      );
 
       const result = await service.findByUser(USER_ID);
 
@@ -254,8 +256,9 @@ describe('WishlistService', () => {
       const wishlist = makeWishlist({ product });
       const getManyMock = jest.fn().mockResolvedValue([wishlist]);
 
-      userRepo.findOne!.mockResolvedValue(makeUser());
-      wishlistRepo.createQueryBuilder!.mockReturnValue(createMockQueryBuilder(getManyMock));
+      wishlistRepo.createQueryBuilder!.mockReturnValue(
+        createMockQueryBuilder(getManyMock),
+      );
 
       await service.findByUser(USER_ID);
 
@@ -271,8 +274,9 @@ describe('WishlistService', () => {
       });
       const getManyMock = jest.fn().mockResolvedValue([wishlist]);
 
-      userRepo.findOne!.mockResolvedValue(makeUser());
-      wishlistRepo.createQueryBuilder!.mockReturnValue(createMockQueryBuilder(getManyMock));
+      wishlistRepo.createQueryBuilder!.mockReturnValue(
+        createMockQueryBuilder(getManyMock),
+      );
 
       const result = await service.findByUser(USER_ID);
 
@@ -302,8 +306,9 @@ describe('WishlistService', () => {
       const wishlist = makeWishlist({ product });
       const getManyMock = jest.fn().mockResolvedValue([wishlist]);
 
-      userRepo.findOne!.mockResolvedValue(makeUser());
-      wishlistRepo.createQueryBuilder!.mockReturnValue(createMockQueryBuilder(getManyMock));
+      wishlistRepo.createQueryBuilder!.mockReturnValue(
+        createMockQueryBuilder(getManyMock),
+      );
 
       const result = await service.findByUser(USER_ID);
       const item = result.items[0];
@@ -322,8 +327,9 @@ describe('WishlistService', () => {
       const wishlist = makeWishlist({ product });
       const getManyMock = jest.fn().mockResolvedValue([wishlist]);
 
-      userRepo.findOne!.mockResolvedValue(makeUser());
-      wishlistRepo.createQueryBuilder!.mockReturnValue(createMockQueryBuilder(getManyMock));
+      wishlistRepo.createQueryBuilder!.mockReturnValue(
+        createMockQueryBuilder(getManyMock),
+      );
 
       const result = await service.findByUser(USER_ID);
       const item = result.items[0];
@@ -337,8 +343,9 @@ describe('WishlistService', () => {
       const wishlist = makeWishlist({ product });
       const getManyMock = jest.fn().mockResolvedValue([wishlist]);
 
-      userRepo.findOne!.mockResolvedValue(makeUser());
-      wishlistRepo.createQueryBuilder!.mockReturnValue(createMockQueryBuilder(getManyMock));
+      wishlistRepo.createQueryBuilder!.mockReturnValue(
+        createMockQueryBuilder(getManyMock),
+      );
 
       const result = await service.findByUser(USER_ID);
       const item = result.items[0];
@@ -352,8 +359,9 @@ describe('WishlistService', () => {
       const wishlist = makeWishlist({ product });
       const getManyMock = jest.fn().mockResolvedValue([wishlist]);
 
-      userRepo.findOne!.mockResolvedValue(makeUser());
-      wishlistRepo.createQueryBuilder!.mockReturnValue(createMockQueryBuilder(getManyMock));
+      wishlistRepo.createQueryBuilder!.mockReturnValue(
+        createMockQueryBuilder(getManyMock),
+      );
 
       const result = await service.findByUser(USER_ID);
       const item = result.items[0];
@@ -369,8 +377,9 @@ describe('WishlistService', () => {
       const wishlist = makeWishlist({ product });
       const getManyMock = jest.fn().mockResolvedValue([wishlist]);
 
-      userRepo.findOne!.mockResolvedValue(makeUser());
-      wishlistRepo.createQueryBuilder!.mockReturnValue(createMockQueryBuilder(getManyMock));
+      wishlistRepo.createQueryBuilder!.mockReturnValue(
+        createMockQueryBuilder(getManyMock),
+      );
 
       const result = await service.findByUser(USER_ID);
       const item = result.items[0];
@@ -399,8 +408,9 @@ describe('WishlistService', () => {
       const wishlistB = makeWishlist({ id: 'w-b', product: productB });
 
       const getManyMock = jest.fn().mockResolvedValue([wishlistA, wishlistB]);
-      userRepo.findOne!.mockResolvedValue(makeUser());
-      wishlistRepo.createQueryBuilder!.mockReturnValue(createMockQueryBuilder(getManyMock));
+      wishlistRepo.createQueryBuilder!.mockReturnValue(
+        createMockQueryBuilder(getManyMock),
+      );
 
       const result = await service.findByUser(USER_ID);
 

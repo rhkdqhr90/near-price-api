@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Flyer } from './entities/flyer.entity';
@@ -14,6 +14,8 @@ import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class FlyerService {
+  private readonly logger = new Logger(FlyerService.name);
+
   constructor(
     @InjectRepository(Flyer)
     private readonly flyerRepository: Repository<Flyer>,
@@ -56,7 +58,7 @@ export class FlyerService {
       where: { notifPromotion: true },
       select: ['fcmToken'],
     });
-    await Promise.all(
+    Promise.allSettled(
       users
         .filter((u) => u.fcmToken)
         .map((u) =>
@@ -66,7 +68,13 @@ export class FlyerService {
             saved.promotionTitle,
           ),
         ),
-    );
+    )
+      .then((results) => {
+        const failed = results.filter((r) => r.status === 'rejected').length;
+        if (failed > 0)
+          this.logger.warn(`FCM 전단지 알림 전송 실패: ${failed}건`);
+      })
+      .catch(() => undefined);
 
     return FlyerResponseDto.from(saved);
   }

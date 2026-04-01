@@ -48,6 +48,7 @@ export class NaverController {
     return await this.naverService.kakaoReverseGeocode(query.lat, query.lng);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get('vworld-geocode')
   async vworldGeocode(
     @Query() query: VworldGeocodeQueryDto,

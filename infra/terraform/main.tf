@@ -11,13 +11,20 @@ terraform {
     }
   }
 
-  # 원격 백엔드 설정 (초기 사용 시 주석 해제)
+  # 원격 백엔드 설정
+  # 먼저 수동으로 생성 후 활성화:
+  #   aws s3 mb s3://nearprice-terraform-state --region ap-northeast-2
+  #   aws dynamodb create-table --table-name nearprice-terraform-locks \
+  #     --attribute-definitions AttributeName=LockID,AttributeType=S \
+  #     --key-schema AttributeName=LockID,KeyType=HASH \
+  #     --billing-mode PAY_PER_REQUEST --region ap-northeast-2
+  # 그 다음: terraform init -migrate-state
   # backend "s3" {
-  #   bucket         = "near-price-terraform-state"
+  #   bucket         = "nearprice-terraform-state"
   #   key            = "prod/terraform.tfstate"
   #   region         = "ap-northeast-2"
+  #   dynamodb_table = "nearprice-terraform-locks"
   #   encrypt        = true
-  #   dynamodb_table = "terraform-lock"
   # }
 }
 

@@ -1,5 +1,15 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthUser } from './types/auth-user.type';
 import { AuthService } from './auth.service';
 import { KakaoLoginDto } from './dto/kakao-login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -29,5 +39,12 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async refresh(@Body() dto: RefreshTokenDto): Promise<AuthResponseDto> {
     return await this.authService.refresh(dto);
+  }
+
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async logout(@CurrentUser() user: AuthUser): Promise<void> {
+    await this.authService.logout(user.userId);
   }
 }

@@ -40,11 +40,16 @@ import { Flyer } from './flyer/entities/flyer.entity';
 import { OwnerPost } from './flyer/entities/owner-post.entity';
 import { StoreReview } from './store/entities/store-review.entity';
 import { NaverModule } from './naver/naver.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      // 프로덕션: EC2의 .env 파일을 PM2가 직접 읽음 (시스템 환경변수)
+      // 개발: 로컬 .env 파일 로드
+      ignoreEnvFile: process.env.NODE_ENV === 'production',
+      envFilePath: '.env',
     }),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
@@ -102,6 +107,7 @@ import { NaverModule } from './naver/naver.module';
     NotificationModule,
     FlyerModule,
     NaverModule,
+    RedisModule,
   ],
   providers: [
     {

@@ -31,6 +31,13 @@ export class WishlistController {
     return await this.wishlistService.add(user.userId, createWishlistDto);
   }
 
+  @Get('me')
+  async findByUser(
+    @CurrentUser() user: AuthUser,
+  ): Promise<WishlistResponseDto> {
+    return await this.wishlistService.findByUser(user.userId);
+  }
+
   @Delete(':productId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(
@@ -38,12 +45,5 @@ export class WishlistController {
     @Param('productId', ParseUUIDPipe) productId: string,
   ): Promise<void> {
     return await this.wishlistService.remove(user.userId, productId);
-  }
-
-  @Get('me')
-  async findByUser(
-    @CurrentUser() user: AuthUser,
-  ): Promise<WishlistResponseDto> {
-    return await this.wishlistService.findByUser(user.userId);
   }
 }

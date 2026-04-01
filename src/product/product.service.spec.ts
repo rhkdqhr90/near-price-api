@@ -110,7 +110,10 @@ describe('ProductService', () => {
         category: ProductCategory.PROCESSED,
         unitType: UnitType.PACK,
       };
-      const productEntity = buildProduct({ name: '진라면', unitType: UnitType.PACK });
+      const productEntity = buildProduct({
+        name: '진라면',
+        unitType: UnitType.PACK,
+      });
 
       productRepo.create.mockReturnValue(productEntity);
       productRepo.save.mockResolvedValue(productEntity);
@@ -377,7 +380,12 @@ describe('ProductService', () => {
   describe('search()', () => {
     it('키워드가 있으면 productSearchService.searchProducts를 호출하고 결과를 반환한다', async () => {
       const mockResults: SearchProductResponseDto[] = [
-        { id: PRODUCT_UUID, name: '신라면', score: 1.5, highlight: ['<em>신라면</em>'] },
+        {
+          id: PRODUCT_UUID,
+          name: '신라면',
+          score: 1.5,
+          highlight: ['<em>신라면</em>'],
+        },
       ];
 
       productSearchService.searchProducts.mockResolvedValue(mockResults);
@@ -480,7 +488,14 @@ describe('ProductService', () => {
         expect.stringContaining('LIMIT $1'),
         [6],
       );
-      expect(result).toEqual(['신라면', '진라면', '당근', '사과', '삼겹살', '우유']);
+      expect(result).toEqual([
+        '신라면',
+        '진라면',
+        '당근',
+        '사과',
+        '삼겹살',
+        '우유',
+      ]);
     });
 
     it('limit을 커스텀 값으로 지정할 수 있다', async () => {
@@ -510,7 +525,7 @@ describe('ProductService', () => {
 
       await service.findPopularTags();
 
-      const sql: string = dataSource.query.mock.calls[0][0] as string;
+      const sql: string = dataSource.query.mock.calls[0][0];
       expect(sql).toContain('products');
       expect(sql).toContain('prices');
       expect(sql).toContain('COUNT');

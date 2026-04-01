@@ -6,11 +6,76 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
-import type {
-  FlyerProductItem,
-  FlyerReviewItem,
-} from '../entities/flyer.entity';
+import { Type } from 'class-transformer';
+
+export class FlyerProductBadgeDto {
+  @IsString()
+  @IsNotEmpty()
+  label: string;
+
+  @IsString()
+  @IsNotEmpty()
+  type: 'red' | 'yellow' | 'blue';
+}
+
+export class FlyerProductItemDto {
+  @IsString()
+  @IsNotEmpty()
+  id: string;
+
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsString()
+  @IsNotEmpty()
+  emoji: string;
+
+  @IsNumber()
+  @IsOptional()
+  originalPrice?: number | null;
+
+  @IsNumber()
+  salePrice: number;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => FlyerProductBadgeDto)
+  badges: FlyerProductBadgeDto[];
+}
+
+export class FlyerReviewItemDto {
+  @IsString()
+  @IsNotEmpty()
+  id: string;
+
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsString()
+  @IsNotEmpty()
+  initial: string;
+
+  @IsString()
+  @IsNotEmpty()
+  meta: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
+  content: string;
+
+  @IsNumber()
+  @IsOptional()
+  helpfulCount?: number;
+
+  @IsString()
+  @IsNotEmpty()
+  avatarColor: string;
+}
 
 export class CreateFlyerDto {
   @IsString()
@@ -88,11 +153,15 @@ export class CreateFlyerDto {
 
   @IsArray()
   @IsOptional()
-  products?: FlyerProductItem[];
+  @ValidateNested({ each: true })
+  @Type(() => FlyerProductItemDto)
+  products?: FlyerProductItemDto[];
 
   @IsArray()
   @IsOptional()
-  reviews?: FlyerReviewItem[];
+  @ValidateNested({ each: true })
+  @Type(() => FlyerReviewItemDto)
+  reviews?: FlyerReviewItemDto[];
 
   @IsBoolean()
   @IsOptional()

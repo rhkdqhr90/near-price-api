@@ -577,7 +577,7 @@ describe('PriceService', () => {
       const qb1 = makeQbMock({ cnt: '1' });
       // 2nd qb: aggregates (getRawMany)
       const qb2 = makeQbMock();
-      (qb2.getRawMany as jest.Mock).mockResolvedValue([
+      qb2.getRawMany.mockResolvedValue([
         { productId: PRODUCT_UUID, maxPrice: '1500', storeCount: '2' },
       ]);
 
@@ -616,7 +616,7 @@ describe('PriceService', () => {
 
       const qb1 = makeQbMock({ cnt: '1' });
       const qb2 = makeQbMock();
-      (qb2.getRawMany as jest.Mock).mockResolvedValue([
+      qb2.getRawMany.mockResolvedValue([
         { productId: PRODUCT_UUID, maxPrice: '800', storeCount: '1' },
       ]);
 
@@ -645,7 +645,7 @@ describe('PriceService', () => {
 
       const qb1 = makeQbMock({ cnt: '1' });
       const qb2 = makeQbMock();
-      (qb2.getRawMany as jest.Mock).mockResolvedValue([
+      qb2.getRawMany.mockResolvedValue([
         { productId: PRODUCT_UUID, maxPrice: '800', storeCount: '1' },
       ]);
 
@@ -697,7 +697,7 @@ describe('PriceService', () => {
 
       const qb1 = makeQbMock({ cnt: '1' });
       const qb2 = makeQbMock();
-      (qb2.getRawMany as jest.Mock).mockResolvedValue([]); // no aggregate
+      qb2.getRawMany.mockResolvedValue([]); // no aggregate
 
       (priceRepo.createQueryBuilder as jest.Mock)
         .mockReturnValueOnce(qb1)
@@ -750,13 +750,12 @@ describe('PriceService', () => {
       );
       expect(qb.leftJoinAndSelect).toHaveBeenCalledWith('price.user', 'user');
       expect(qb.where).toHaveBeenCalledWith(
-        'LOWER(TRIM(product.name)) LIKE LOWER(:pattern)',
-        { pattern: '%신라면%' },
+        'LOWER(TRIM(product.name)) LIKE LOWER(:pattern) ESCAPE :escape',
+        { pattern: '%신라면%', escape: '\\' },
       );
-      expect(qb.andWhere).toHaveBeenCalledWith(
-        'price.isActive = :isActive',
-        { isActive: true },
-      );
+      expect(qb.andWhere).toHaveBeenCalledWith('price.isActive = :isActive', {
+        isActive: true,
+      });
       expect(qb.orderBy).toHaveBeenCalledWith('price.price', 'ASC');
       expect(result).toHaveLength(2);
       expect(result[0]).toBeInstanceOf(PriceResponseDto);
@@ -778,8 +777,8 @@ describe('PriceService', () => {
       await service.findByProductName('  신라면  ');
 
       expect(qb.where).toHaveBeenCalledWith(
-        'LOWER(TRIM(product.name)) LIKE LOWER(:pattern)',
-        { pattern: '%신라면%' },
+        'LOWER(TRIM(product.name)) LIKE LOWER(:pattern) ESCAPE :escape',
+        { pattern: '%신라면%', escape: '\\' },
       );
     });
 
