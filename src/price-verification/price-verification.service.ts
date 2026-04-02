@@ -403,34 +403,4 @@ export class PriceVerificationService {
     };
   }
 
-  /**
-   * 사용자 신뢰도 점수 온디맨드 재계산 (간이 버전)
-   *
-   * 역할: 외부에서 특정 사용자의 신뢰도를 즉시 업데이트해야 할 때 사용.
-   * 알고리즘: 최근 90일 검증 중 CONFIRMED 비율 단순 계산.
-   *
-   * 주의: TrustScoreScheduler.recalculateAll() 과 역할이 다름.
-   * - 이 메서드: User.trustScore만 업데이트 (단순 비율)
-   * - 스케줄러 (매일 새벽 3시): registrationScore + verificationScore + activeDays
-   *   복합 계산 후 UserTrustScore 세부 통계까지 갱신하는 정식 재계산
-   */
-  async recalculateTrustScore(userId: string): Promise<void> {
-    const since90d = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-
-    const verifications = await this.verificationRepository.find({
-      where: {
-        verifier: { id: userId },
-        createdAt: MoreThan(since90d),
-      },
-    });
-
-    const total = verifications.length;
-    const correct = verifications.filter(
-      (v) => v.result === VerificationResult.CONFIRMED,
-    ).length;
-
-    const score = total === 0 ? 50 : Math.round((correct / total) * 100);
-
-    await this.userRepository.update(userId, { trustScore: score });
-  }
 }

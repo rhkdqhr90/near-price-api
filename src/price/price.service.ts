@@ -393,9 +393,6 @@ export class PriceService {
     });
     if (!price) throw new NotFoundException('가격 정보가 없습니다.');
     await this.priceRepository.update({ id }, { isActive: false });
-    if (price.user?.id) {
-      await this.priceReactionService.recalculateTrustScore(price.user.id);
-    }
   }
 
   async remove(id: string, userId: string): Promise<void> {

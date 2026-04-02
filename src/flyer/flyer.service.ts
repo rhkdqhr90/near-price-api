@@ -53,30 +53,41 @@ export class FlyerService {
     const flyer = this.flyerRepository.create(dto);
     const saved = await this.flyerRepository.save(flyer);
 
-    // 전단지 알림 수신 동의 사용자에게 FCM 푸시 발송
-    const users = await this.userRepository.find({
-      where: { notifPromotion: true },
-      select: ['fcmToken'],
-    });
-    Promise.allSettled(
-      users
-        .filter((u) => u.fcmToken)
-        .map((u) =>
-          this.notificationService.sendToUser(
-            u.fcmToken!,
-            `${saved.storeName} 새 전단지`,
-            saved.promotionTitle,
-          ),
-        ),
-    )
-      .then((results) => {
-        const failed = results.filter((r) => r.status === 'rejected').length;
-        if (failed > 0)
-          this.logger.warn(`FCM 전단지 알림 전송 실패: ${failed}건`);
-      })
-      .catch(() => undefined);
+    // 전단지 알림 수신 동의 사용자에게 FCM 푸시 발송 (500명 청크 배치)
+    this.sendFlyerNotifications(
+      `${saved.storeName} 새 전단지`,
+      saved.promotionTitle,
+    ).catch((err: unknown) =>
+      this.logger.warn('전단지 FCM 알림 실패', (err as Error)?.message),
+    );
 
     return FlyerResponseDto.from(saved);
+  }
+
+  private async sendFlyerNotifications(
+    title: string,
+    body: string,
+  ): Promise<void> {
+    const BATCH_SIZE = 500;
+    let skip = 0;
+    while (true) {
+      const users = await this.userRepository.find({
+        where: { notifPromotion: true },
+        select: ['fcmToken'],
+        take: BATCH_SIZE,
+        skip,
+      });
+      if (users.length === 0) break;
+      const results = await Promise.allSettled(
+        users
+          .filter((u) => u.fcmToken)
+          .map((u) => this.notificationService.sendToUser(u.fcmToken!, title, body)),
+      );
+      const failed = results.filter((r) => r.status === 'rejected').length;
+      if (failed > 0) this.logger.warn(`FCM 전단지 알림 전송 실패: ${failed}건`);
+      skip += BATCH_SIZE;
+      if (users.length < BATCH_SIZE) break;
+    }
   }
 
   async updateFlyer(

@@ -25,15 +25,10 @@ export class PriceReactionService {
     @InjectRepository(Price)
     private readonly priceRepository: Repository<Price>,
 
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
-
     private readonly dataSource: DataSource,
   ) {}
 
   async confirm(priceId: string, userId: string): Promise<void> {
-    let priceOwnerId: string | null = null;
-
     await this.dataSource.transaction(async (manager) => {
       const existing = await manager.findOne(PriceReaction, {
         where: { price: { id: priceId }, user: { id: userId } },
@@ -42,7 +37,6 @@ export class PriceReactionService {
       });
 
       if (existing) {
-        priceOwnerId = existing.price.user?.id ?? null;
         if (existing.price.user?.id === userId) {
           throw new ForbiddenException(
             '본인이 등록한 가격에는 반응할 수 없습니다.',
@@ -63,8 +57,6 @@ export class PriceReactionService {
         relations: ['user'],
       });
       if (!price) throw new NotFoundException('가격 정보가 없습니다.');
-
-      priceOwnerId = price.user?.id ?? null;
 
       if (price.user?.id === userId) {
         throw new ForbiddenException(
@@ -90,13 +82,9 @@ export class PriceReactionService {
         throw err;
       }
     });
-
-    if (priceOwnerId) await this.recalculateTrustScore(priceOwnerId);
   }
 
   async report(priceId: string, userId: string, reason: string): Promise<void> {
-    let priceOwnerId: string | null = null;
-
     await this.dataSource.transaction(async (manager) => {
       const existing = await manager.findOne(PriceReaction, {
         where: { price: { id: priceId }, user: { id: userId } },
@@ -113,7 +101,6 @@ export class PriceReactionService {
             '본인이 등록한 가격에는 반응할 수 없습니다.',
           );
         }
-        priceOwnerId = existing.price.user?.id ?? null;
         existing.type = PriceReactionType.REPORT;
         existing.reason = reason;
         await manager.save(existing);
@@ -125,8 +112,6 @@ export class PriceReactionService {
         relations: ['user'],
       });
       if (!price) throw new NotFoundException('가격 정보가 없습니다.');
-
-      priceOwnerId = price.user?.id ?? null;
 
       if (price.user?.id === userId) {
         throw new ForbiddenException(
@@ -152,8 +137,6 @@ export class PriceReactionService {
         throw err;
       }
     });
-
-    if (priceOwnerId) await this.recalculateTrustScore(priceOwnerId);
   }
 
   async getReactions(
@@ -204,25 +187,5 @@ export class PriceReactionService {
       },
       createdAt: r.createdAt,
     }));
-  }
-
-  async recalculateTrustScore(targetUserId: string): Promise<void> {
-    const result = await this.reactionRepository
-      .createQueryBuilder('pr')
-      .select(
-        `COALESCE(SUM(CASE WHEN pr.type = 'confirm' THEN 1 WHEN pr.type = 'report' THEN -2 ELSE 0 END), 0)`,
-        'score',
-      )
-      .innerJoin('pr.price', 'p')
-      .innerJoin('p.user', 'u')
-      .where('u.id = :targetUserId', { targetUserId })
-      .andWhere('p.isActive = :isActive', { isActive: true })
-      .getRawOne<{ score: string }>();
-
-    const score = Math.max(0, parseInt(result?.score ?? '0', 10));
-    await this.userRepository.update(
-      { id: targetUserId },
-      { trustScore: score },
-    );
   }
 }

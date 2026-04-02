@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
@@ -20,6 +21,7 @@ export enum StoreType {
 export type StoreTypeValue = StoreType | string;
 
 @Entity('stores')
+@Index(['latitude', 'longitude'])
 export class Store {
   @PrimaryGeneratedColumn('uuid')
   id: string;
