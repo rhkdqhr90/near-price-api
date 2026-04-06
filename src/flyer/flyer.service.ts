@@ -81,10 +81,13 @@ export class FlyerService {
       const results = await Promise.allSettled(
         users
           .filter((u) => u.fcmToken)
-          .map((u) => this.notificationService.sendToUser(u.fcmToken!, title, body)),
+          .map((u) =>
+            this.notificationService.sendToUser(u.fcmToken!, title, body),
+          ),
       );
       const failed = results.filter((r) => r.status === 'rejected').length;
-      if (failed > 0) this.logger.warn(`FCM 전단지 알림 전송 실패: ${failed}건`);
+      if (failed > 0)
+        this.logger.warn(`FCM 전단지 알림 전송 실패: ${failed}건`);
       skip += BATCH_SIZE;
       if (users.length < BATCH_SIZE) break;
     }

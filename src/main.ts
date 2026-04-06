@@ -69,14 +69,43 @@ async function bootstrap() {
   );
 
   // HTTPS 리다이렉트 미들웨어 (프로덕션 환경)
+  // Host 헤더는 공격자가 조작 가능하므로 환경변수의 허용 도메인만 사용
   if (process.env.NODE_ENV === 'production') {
-    app.use((req: Request, res: Response, next: NextFunction) => {
-      if (req.headers['x-forwarded-proto'] !== 'https') {
-        res.redirect(`https://${req.headers.host ?? ''}${req.url}`);
-      } else {
-        next();
-      }
-    });
+    const allowedHosts = new Set(
+      (process.env.CORS_ORIGIN ?? '')
+        .split(',')
+        .map((o) => {
+          try {
+            return new URL(o.trim()).host;
+          } catch {
+            return '';
+          }
+        })
+        .filter(Boolean),
+    );
+    // API 자체 호스트 추가 (CORS_ORIGIN에 없을 수 있으므로)
+    if (process.env.API_HOST) {
+      allowedHosts.add(process.env.API_HOST);
+    }
+
+    if (allowedHosts.size === 0) {
+      new Logger('Bootstrap').error(
+        '[Security] HTTPS redirect disabled — CORS_ORIGIN or API_HOST must be set in production to prevent open redirect',
+      );
+    } else {
+      app.use((req: Request, res: Response, next: NextFunction) => {
+        if (req.headers['x-forwarded-proto'] !== 'https') {
+          const reqHost = req.headers.host ?? '';
+          if (!allowedHosts.has(reqHost)) {
+            res.status(421).end(); // Misdirected Request
+            return;
+          }
+          res.redirect(`https://${reqHost}${req.url}`);
+        } else {
+          next();
+        }
+      });
+    }
   }
 
   // CORS — 문자열 배열은 정확한 Origin 매칭 (suffix 우회 불가)

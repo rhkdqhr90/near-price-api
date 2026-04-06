@@ -199,18 +199,10 @@
 - [ ] @IsOptional() 올바르게 사용? (선택 필드만)
 - [ ] FK 변경 방지 필요시 CreateDto에만 포함?
 
-### 신뢰도 시스템 필드 (NEW)
-- [ ] trustScore: int (0~100) 처리?
-- [ ] verificationResult: ENUM (MATCH / DIFFERENT)?
-- [ ] badgeLevel: ENUM (BRONZE / SILVER / GOLD / PLATINUM)?
+### 신뢰도 시스템 필드
+- [ ] verificationResult enum 값은 실제 Entity(`src/price-verification/entities/price-verification.entity.ts`) 참조? (`confirmed` / `disputed`)
+- [ ] trustScore는 `TrustScoreScheduler`(매일 03:00)만 업데이트? (Service에서 즉시 계산 금지)
 - [ ] UI 표현 로직은 ResponseDto에서만 노출?
-  ```typescript
-  // ResponseDto에서만
-  get trustScoreLabel(): string {
-    if (this.trustScore >= 80) return 'GOLD';
-    // ...
-  }
-  ```
 
 ---
 

@@ -14,12 +14,24 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   constructor(private readonly configService: ConfigService) {}
 
+  /** Redis 클라이언트가 연결되어 있는지 여부 */
+  get available(): boolean {
+    return this.client !== null;
+  }
+
   async onModuleInit(): Promise<void> {
     const url = this.configService.get<string>('REDIS_URL');
     if (!url) {
-      this.logger.warn(
-        'REDIS_URL not set — Redis disabled (in-memory fallback)',
-      );
+      const env = this.configService.get<string>('NODE_ENV');
+      if (env === 'production') {
+        this.logger.error(
+          'REDIS_URL not set in production — refresh token rotation and revocation DISABLED',
+        );
+      } else {
+        this.logger.warn(
+          'REDIS_URL not set — Redis disabled (development mode)',
+        );
+      }
       return;
     }
 

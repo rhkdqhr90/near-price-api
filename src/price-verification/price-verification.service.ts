@@ -402,5 +402,4 @@ export class PriceVerificationService {
       isStale,
     };
   }
-
 }

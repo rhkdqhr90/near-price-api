@@ -104,14 +104,17 @@ export class AuthService {
       throw new UnauthorizedException('유효하지 않은 토큰 타입입니다.');
     }
 
-    // Redis에 저장된 리프레시 토큰과 비교 (Redis 미설정 시 스킵)
-    const storedToken = await this.redisService.get(
-      `${REFRESH_TOKEN_PREFIX}${payload.sub}`,
-    );
-    if (storedToken !== null && storedToken !== dto.refreshToken) {
-      throw new UnauthorizedException(
-        '이미 사용되었거나 무효화된 리프레시 토큰입니다.',
-      );
+    // Redis에 저장된 리프레시 토큰과 비교
+    const redisKey = `${REFRESH_TOKEN_PREFIX}${payload.sub}`;
+    const storedToken = await this.redisService.get(redisKey);
+
+    // Redis 연결 가능한 경우: 저장된 토큰이 없거나(로그아웃/만료) 불일치하면 차단
+    if (this.redisService.available) {
+      if (storedToken === null || storedToken !== dto.refreshToken) {
+        throw new UnauthorizedException(
+          '이미 사용되었거나 무효화된 리프레시 토큰입니다.',
+        );
+      }
     }
 
     const user = await this.userRepository.findOne({

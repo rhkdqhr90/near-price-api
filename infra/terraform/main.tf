@@ -35,7 +35,7 @@ provider "aws" {
     tags = {
       Project     = var.project_name
       Environment = var.environment
-      CreatedAt   = timestamp()
+      # timestamp()는 매 plan마다 변경되어 perpetual diff 발생 → 제거
       ManagedBy   = "Terraform"
     }
   }

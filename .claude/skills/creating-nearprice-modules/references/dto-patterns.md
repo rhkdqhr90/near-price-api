@@ -104,68 +104,17 @@ import { IsString, IsNumber, IsEmail, IsUUID, IsDate, IsInt,
 @IsArray() @IsUUID('all', { each: true }) productIds: string[];
 ```
 
-## 신뢰도 시스템 DTO 예제 (NEW)
+## 신뢰도 시스템 DTO
 
-### CreateVerificationDto
-```typescript
-export class CreateVerificationDto {
-  @IsEnum(VerificationResult)
-  result: VerificationResult; // MATCH | DIFFERENT
+신뢰도 시스템 관련 DTO(CreateVerificationDto, VerificationResponseDto 등)는
+**실제 DTO 파일을 직접 참조할 것.**
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  comment?: string;
-}
-```
-
-### VerificationResponseDto
-```typescript
-export class VerificationResponseDto {
-  id: string;
-  priceId: string;
-  userId: string;
-  result: VerificationResult;
-  comment?: string;
-  createdAt: Date;
-
-  static from(entity: PriceVerification): VerificationResponseDto {
-    const dto = new VerificationResponseDto();
-    dto.id = entity.id;
-    dto.priceId = entity.priceId;
-    dto.userId = entity.userId;
-    dto.result = entity.result;
-    dto.comment = entity.comment;
-    dto.createdAt = entity.createdAt;
-    return dto;
-  }
-}
-```
-
-### TrustScoreResponseDto
-```typescript
-export class TrustScoreResponseDto {
-  userId: string;
-  trustScore: number; // 0~100
-  level: BadgeLevel; // BRONZE | SILVER | GOLD | PLATINUM
-  totalVerifications: number;
-  matchVerifications: number;
-  matchRatio: number; // 0~100
-
-  static from(entity: TrustScore): TrustScoreResponseDto {
-    const dto = new TrustScoreResponseDto();
-    dto.userId = entity.userId;
-    dto.trustScore = entity.trustScore;
-    dto.level = entity.level;
-    dto.totalVerifications = entity.totalVerifications;
-    dto.matchVerifications = entity.matchVerifications;
-    dto.matchRatio = entity.totalVerifications > 0
-      ? (entity.matchVerifications / entity.totalVerifications) * 100
-      : 0;
-    return dto;
-  }
-}
-```
+> `src/price-verification/dto/`
+> `src/trust-score/dto/`
+> `src/badge/dto/`
+>
+> enum 값(confirmed/disputed 등)은 실제 Entity 파일에서 import해서 사용한다.
+> Reference 파일의 예시는 실제 코드와 동기화가 어려워 오히려 혼동을 유발할 수 있음.
 
 ## 금지사항
 

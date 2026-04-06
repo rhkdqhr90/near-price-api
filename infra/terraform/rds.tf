@@ -63,11 +63,8 @@ resource "aws_db_parameter_group" "postgres" {
   family      = "postgres16"
   description = "PostgreSQL 파라미터 그룹"
 
-  # 한국어 지원 문자 인코딩
-  parameter {
-    name  = "server_encoding"
-    value = "UTF8"
-  }
+  # server_encoding은 RDS에서 파라미터 그룹으로 변경 불가 (컴파일 타임 옵션)
+  # RDS PostgreSQL은 기본적으로 UTF-8로 생성됨 → 별도 설정 불필요
 
   # 슬로우 쿼리 로깅
   parameter {

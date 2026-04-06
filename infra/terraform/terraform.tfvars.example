@@ -1,40 +1,75 @@
 # terraform.tfvars.example
-# 사용법: 이 파일을 복사하여 terraform.tfvars를 생성하고 값을 수정하세요.
-# cp terraform.tfvars.example terraform.tfvars
+# 사용법:
+#   cp terraform.tfvars.example terraform.tfvars
+#   # terraform.tfvars를 열어 값 수정 후 저장
+#   terraform plan -var-file=terraform.tfvars
 
-aws_region       = "ap-northeast-2"
-project_name     = "near-price"
-environment      = "prod"
+# ─────────────────────────────────────────────
+# 기본 설정
+# ─────────────────────────────────────────────
+aws_region   = "ap-northeast-2"
+project_name = "near-price"
+environment  = "prod"
 
+# 서비스 도메인 (ACM 인증서 발급 및 ALB 연결에 사용)
+domain_name = "masil.kr"   # 실제 도메인으로 변경
+
+# 프리 티어 권장 모드
+enable_alb                = false  # ALB/ACM 비활성화 (비용 절감)
+enable_direct_ec2_ingress = true   # EC2 80/443 직접 인바운드 허용
+enable_elasticache        = false  # ElastiCache 비활성화 (비용 절감)
+enable_vpc_flow_logs      = false  # VPC Flow Logs 비활성화 (비용 절감)
+
+# ─────────────────────────────────────────────
 # VPC 설정
-vpc_cidr              = "10.0.0.0/16"
-public_subnet_cidrs   = ["10.0.1.0/24", "10.0.2.0/24"]
-private_subnet_cidrs  = ["10.0.11.0/24", "10.0.12.0/24"]
+# ─────────────────────────────────────────────
+vpc_cidr             = "10.0.0.0/16"
+public_subnet_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs = ["10.0.11.0/24", "10.0.12.0/24"]
 
+# NAT Gateway: Private → 인터넷 필요 시 true (비용: ~$32/월)
+# RDS/ElastiCache는 인터넷 불필요 → 보통 false
+enable_nat_gateway = false
+
+# ─────────────────────────────────────────────
 # EC2 설정
-instance_type        = "t3.small"
-key_pair_name        = "near-price-key"  # 사전에 AWS에서 생성된 키 페어 이름
-ec2_instance_count   = 1                 # MVP: 1개, 프로덕션: 2개
-enable_monitoring    = false             # CloudWatch 상세 모니터링 (비용 발생)
+# ─────────────────────────────────────────────
+instance_type      = "t3.micro"
+key_pair_name      = "near-price-key"   # AWS에서 사전 생성된 키 페어 이름
+ec2_instance_count = 1                  # MVP: 1, 프로덕션: 2
+enable_monitoring  = false              # CloudWatch 상세 모니터링 (비용 발생)
 
-# RDS 설정
-db_allocated_storage      = 20
-db_instance_class         = "db.t3.micro"    # 프리 티어
-db_engine_version         = "16.1"
-db_name                   = "nearprice"
-db_username               = "admin"
-db_password               = "ChangeMe!12345"  # 필수: 8자 이상, 특수문자 포함
-db_backup_retention_days  = 7
-db_backup_window          = "02:00-03:00"    # 한국시간 (UTC+9): 오전 11:00-12:00
-db_maintenance_window     = "sun:03:00-sun:04:00"  # 한국시간: 일요일 정오-1시
-db_multi_az               = false            # MVP: false, 프로덕션: true
+# ─────────────────────────────────────────────
+# RDS (PostgreSQL) 설정
+# ─────────────────────────────────────────────
+db_allocated_storage     = 20
+db_instance_class        = "db.t3.micro"         # 프리 티어 가능
+db_engine_version        = "16.1"
+db_name                  = "nearprice"
+db_username              = "admin"
+db_password              = "CHANGE_ME_!Strong#Password"  # ⚠ 반드시 변경!
+db_backup_retention_days = 7
+db_backup_window         = "02:00-03:00"          # UTC (한국시간: 오전 11시)
+db_maintenance_window    = "sun:03:00-sun:04:00"  # UTC (한국시간: 일요일 정오)
+db_multi_az              = false                  # MVP: false, 프로덕션: true
 
-# 보안 설정
-allowed_ssh_cidrs   = ["YOUR_OFFICE_IP/32", "YOUR_HOME_IP/32"]  # 관리자 IP로 변경 필수
+# ─────────────────────────────────────────────
+# ElastiCache (Redis) 설정
+# ─────────────────────────────────────────────
+redis_node_type  = "cache.t2.micro"   # 프리티어: cache.t2.micro
+redis_num_nodes  = 1                    # enable_elasticache=true일 때만 사용
+redis_auth_token = "CHANGE_ME_AtLeast16Chars!!"  # enable_elasticache=true일 때 필수
+
+# ─────────────────────────────────────────────
+# 보안 설정 - ⚠ 반드시 실제 IP로 변경!
+# ─────────────────────────────────────────────
+allowed_ssh_cidrs   = ["YOUR_OFFICE_IP/32", "YOUR_HOME_IP/32"]  # 예: ["123.45.67.89/32"]
 allowed_http_cidrs  = ["0.0.0.0/0"]
 allowed_https_cidrs = ["0.0.0.0/0"]
 
+# ─────────────────────────────────────────────
 # 태그
+# ─────────────────────────────────────────────
 tags = {
   Owner   = "DevOps Team"
   Slack   = "@devops"

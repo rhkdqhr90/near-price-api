@@ -96,14 +96,15 @@ locals {
 # EC2 인스턴스 (Public Subnet에 배치)
 resource "aws_instance" "api_server" {
   count                    = var.ec2_instance_count
-  ami                      = data.aws_ami.amazon_linux_2.id
-  instance_type            = var.instance_type
-  subnet_id                = aws_subnet.public[count.index % 2].id
-  vpc_security_group_ids   = [aws_security_group.api_server.id]
-  iam_instance_profile     = aws_iam_instance_profile.ec2_profile.name
+  ami                         = data.aws_ami.amazon_linux_2.id
+  instance_type               = var.instance_type
+  subnet_id                   = aws_subnet.public[count.index % 2].id
+  vpc_security_group_ids      = [aws_security_group.api_server.id]
+  iam_instance_profile        = aws_iam_instance_profile.ec2_profile.name
+  key_name                    = var.key_pair_name  # [수정] SSH 키 페어 연결 (누락된 설정)
   associate_public_ip_address = true
-  monitoring               = var.enable_monitoring
-  user_data                = local.user_data
+  monitoring                  = var.enable_monitoring
+  user_data                   = local.user_data
 
   # 스토리지 설정
   root_block_device {
@@ -128,7 +129,8 @@ resource "aws_instance" "api_server" {
     Role = "API Server"
   }
 
-  depends_on = [aws_instance.api_server]
+  # [수정] 자기 자신을 참조하는 순환 depends_on 제거 (버그)
+  depends_on = [aws_internet_gateway.main]
 }
 
 # Elastic IP 할당

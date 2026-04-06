@@ -63,138 +63,17 @@ Price가 앱의 중심 엔티티. 관계 설정 시 JoinColumn 명시적 사용.
 store: Store;
 ```
 
-## 신뢰도 시스템 Entity 예제 (NEW)
+## 🚫 신뢰도 시스템 Entity
 
-### PriceVerification Entity
-```typescript
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
-import { Price } from '../price/entities/price.entity';
-import { User } from '../user/entities/user.entity';
+신뢰도 시스템 Entity(PriceVerification, UserTrustScore, BadgeDefinition, UserBadge)는
+**실제 Entity 파일과 `PROJECT.md` 스키마를 직접 참조할 것.**
 
-export enum VerificationResult {
-  MATCH = 'MATCH',           // 가격이 맞음
-  DIFFERENT = 'DIFFERENT',   // 가격이 다름
-}
-
-@Entity('price_verification')
-@Index(['priceId', 'userId'], { unique: true }) // 1사용자 1투표
-@Index(['priceId', 'result']) // 가격별 검증 조회 최적화
-export class PriceVerification {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
-  @ManyToOne(() => Price, (price) => price.verifications, { nullable: false })
-  @JoinColumn({ name: 'price_id' })
-  price: Price;
-
-  @Column('uuid')
-  priceId: string;
-
-  @ManyToOne(() => User, { nullable: false })
-  @JoinColumn({ name: 'user_id' })
-  user: User;
-
-  @Column('uuid')
-  userId: string;
-
-  @Column({
-    type: 'enum',
-    enum: VerificationResult,
-  })
-  result: VerificationResult;
-
-  @Column({ type: 'text', nullable: true })
-  comment: string | null;
-
-  @CreateDateColumn()
-  createdAt: Date;
-
-  @UpdateDateColumn()
-  updatedAt: Date;
-}
-```
-
-### TrustScore Entity
-```typescript
-import { Entity, PrimaryGeneratedColumn, Column, OneToOne, JoinColumn, UpdateDateColumn } from 'typeorm';
-import { User } from '../user/entities/user.entity';
-
-export enum BadgeLevel {
-  BRONZE = 'BRONZE',         // 0-24
-  SILVER = 'SILVER',         // 25-49
-  GOLD = 'GOLD',             // 50-74
-  PLATINUM = 'PLATINUM',     // 75-100
-}
-
-@Entity('trust_score')
-export class TrustScore {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
-  @OneToOne(() => User, (user) => user.trustScore, { nullable: false })
-  @JoinColumn({ name: 'user_id' })
-  user: User;
-
-  @Column('uuid', { unique: true })
-  userId: string;
-
-  @Column({ type: 'int', default: 0 })
-  totalVerifications: number; // 총 검증 수
-
-  @Column({ type: 'int', default: 0 })
-  matchVerifications: number; // 맞아요 수
-
-  @Column({
-    type: 'int',
-    default: 0,
-    transformer: {
-      from: (v: number) => v,
-      to: (v: number) => Math.min(100, Math.max(0, v)), // 0~100 범위
-    },
-  })
-  trustScore: number; // 0~100 (계산값)
-
-  @Column({
-    type: 'enum',
-    enum: BadgeLevel,
-    default: BadgeLevel.BRONZE,
-  })
-  level: BadgeLevel; // 등급
-
-  @UpdateDateColumn()
-  updatedAt: Date;
-}
-```
-
-### Badge Entity
-```typescript
-import { Entity, PrimaryGeneratedColumn, Column, OneToOne, JoinColumn, CreateDateColumn } from 'typeorm';
-import { User } from '../user/entities/user.entity';
-import { BadgeLevel } from './trust-score.entity';
-
-@Entity('badge')
-export class Badge {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
-  @OneToOne(() => User, (user) => user.badge, { nullable: false })
-  @JoinColumn({ name: 'user_id' })
-  user: User;
-
-  @Column('uuid', { unique: true })
-  userId: string;
-
-  @Column({
-    type: 'enum',
-    enum: BadgeLevel,
-    default: BadgeLevel.BRONZE,
-  })
-  level: BadgeLevel;
-
-  @CreateDateColumn()
-  createdAt: Date;
-}
-```
+> `src/price-verification/entities/price-verification.entity.ts`
+> `src/trust-score/entities/`
+> `src/badge/entities/`
+>
+> Reference 파일에 예시를 두지 않는 이유: 신뢰도 시스템은 구조가 복잡하고 자주 변경됨.
+> 틀린 예시가 올바른 규칙보다 더 위험하기 때문에 원본 파일을 직접 읽어서 파악한다.
 
 ## 금지사항
 

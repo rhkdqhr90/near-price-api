@@ -68,9 +68,47 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
+# ─────────────────────────────────────────────
+# [신규] NAT Gateway (선택적 활성화)
+# enable_nat_gateway = true 로 설정 시 Private → 인터넷 가능
+# 비용: ~$32/월 + 데이터 전송 비용
+# RDS/ElastiCache는 인터넷 필요 없으므로 기본 false
+# ─────────────────────────────────────────────
+resource "aws_eip" "nat" {
+  count  = var.enable_nat_gateway ? 1 : 0
+  domain = "vpc"
+
+  tags = {
+    Name = "${var.project_name}-nat-eip"
+  }
+
+  depends_on = [aws_internet_gateway.main]
+}
+
+resource "aws_nat_gateway" "main" {
+  count         = var.enable_nat_gateway ? 1 : 0
+  allocation_id = aws_eip.nat[0].id
+  subnet_id     = aws_subnet.public[0].id
+
+  tags = {
+    Name = "${var.project_name}-nat-gw"
+  }
+
+  depends_on = [aws_internet_gateway.main]
+}
+
 # Private Route Table
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
+
+  # NAT Gateway 활성화 시 기본 경로 추가
+  dynamic "route" {
+    for_each = var.enable_nat_gateway ? [1] : []
+    content {
+      cidr_block     = "0.0.0.0/0"
+      nat_gateway_id = aws_nat_gateway.main[0].id
+    }
+  }
 
   tags = {
     Name = "${var.project_name}-private-rt"
@@ -192,8 +230,9 @@ resource "aws_network_acl" "private" {
 
 # VPC Flow Logs (디버깅용)
 resource "aws_flow_log" "vpc" {
-  iam_role_arn    = aws_iam_role.flow_logs.arn
-  log_destination = aws_cloudwatch_log_group.flow_logs.arn
+  count           = var.enable_vpc_flow_logs ? 1 : 0
+  iam_role_arn    = aws_iam_role.flow_logs[0].arn
+  log_destination = aws_cloudwatch_log_group.flow_logs[0].arn
   traffic_type    = "REJECT"
   vpc_id          = aws_vpc.main.id
 
@@ -203,6 +242,7 @@ resource "aws_flow_log" "vpc" {
 }
 
 resource "aws_cloudwatch_log_group" "flow_logs" {
+  count             = var.enable_vpc_flow_logs ? 1 : 0
   name              = "/aws/vpc/flow-logs/${var.project_name}"
   retention_in_days = 7
 
@@ -212,6 +252,7 @@ resource "aws_cloudwatch_log_group" "flow_logs" {
 }
 
 resource "aws_iam_role" "flow_logs" {
+  count = var.enable_vpc_flow_logs ? 1 : 0
   name = "${var.project_name}-vpc-flow-logs-role"
 
   assume_role_policy = jsonencode({
@@ -233,8 +274,9 @@ resource "aws_iam_role" "flow_logs" {
 }
 
 resource "aws_iam_role_policy" "flow_logs" {
+  count = var.enable_vpc_flow_logs ? 1 : 0
   name = "${var.project_name}-vpc-flow-logs-policy"
-  role = aws_iam_role.flow_logs.id
+  role = aws_iam_role.flow_logs[0].id
 
   policy = jsonencode({
     Version = "2012-10-17"
