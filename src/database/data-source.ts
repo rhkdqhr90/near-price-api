@@ -36,6 +36,7 @@ export const AppDataSource = new DataSource({
   username: requireEnv('DB_USERNAME', 'postgres'),
   password: requireEnv('DB_PASSWORD', ''),
   database: requireEnv('DB_DATABASE', 'nearprice'),
+  ssl: isProduction ? { rejectUnauthorized: false } : false,
   entities: [
     User,
     UserOauth,
