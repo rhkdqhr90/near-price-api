@@ -112,7 +112,7 @@ variable "db_instance_class" {
 variable "db_engine_version" {
   description = "PostgreSQL 버전"
   type        = string
-  default     = "16.1"
+  default     = "16.13"
 }
 
 variable "db_name" {
@@ -124,7 +124,7 @@ variable "db_name" {
 variable "db_username" {
   description = "데이터베이스 관리자 사용자명"
   type        = string
-  default     = "admin"
+  default     = "nearprice_admin"
 }
 
 variable "db_password" {

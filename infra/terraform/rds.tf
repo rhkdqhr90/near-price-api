@@ -61,7 +61,7 @@ resource "aws_db_instance" "postgres" {
 resource "aws_db_parameter_group" "postgres" {
   name_prefix = "${var.project_name}-postgres-"
   family      = "postgres16"
-  description = "PostgreSQL 파라미터 그룹"
+  description = "PostgreSQL parameter group"
 
   # server_encoding은 RDS에서 파라미터 그룹으로 변경 불가 (컴파일 타임 옵션)
   # RDS PostgreSQL은 기본적으로 UTF-8로 생성됨 → 별도 설정 불필요
@@ -86,12 +86,14 @@ resource "aws_db_parameter_group" "postgres" {
   parameter {
     name  = "max_connections"
     value = "100"
+    apply_method = "pending-reboot"
   }
 
   # 공유 메모리 설정 (t3.micro: 512MB)
   parameter {
     name  = "shared_buffers"
     value = "{DBInstanceClassMemory/32}"
+    apply_method = "pending-reboot"
   }
 
   # 임시 작업 메모리
@@ -143,7 +145,7 @@ resource "aws_iam_role_policy_attachment" "rds_monitoring" {
 # RDS 옵션 그룹 (선택사항)
 resource "aws_db_option_group" "postgres" {
   name_prefix          = "${var.project_name}-postgres-"
-  option_group_description = "PostgreSQL 옵션 그룹"
+  option_group_description = "PostgreSQL option group"
   engine_name          = "postgres"
   major_engine_version = "16"
 

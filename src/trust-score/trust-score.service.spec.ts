@@ -10,10 +10,6 @@ import {
 } from '../price-verification/entities/price-verification.entity';
 import { UserTrustScore } from './entities/user-trust-score.entity';
 import {
-  PriceReaction,
-  PriceReactionType,
-} from '../price-reaction/entities/price-reaction.entity';
-import {
   UserTrustScoreCalculator,
   UserTrustScoreResult,
 } from './services/user-trust-score.calculator';
@@ -34,9 +30,6 @@ describe('TrustScoreService', () => {
       Repository<UserTrustScore>,
       'find' | 'findOne' | 'update' | 'save' | 'create'
     >
-  >;
-  let reactionRepository: jest.Mocked<
-    Pick<Repository<PriceReaction>, 'createQueryBuilder'>
   >;
   let userTrustScoreCalculator: jest.Mocked<UserTrustScoreCalculator>;
   let priceTrustScoreCalculator: jest.Mocked<PriceTrustScoreCalculator>;
@@ -154,10 +147,6 @@ describe('TrustScoreService', () => {
           },
         },
         {
-          provide: getRepositoryToken(PriceReaction),
-          useValue: { createQueryBuilder: jest.fn() },
-        },
-        {
           provide: UserTrustScoreCalculator,
           useValue: { calculateUserTrustScore: jest.fn() },
         },
@@ -173,7 +162,6 @@ describe('TrustScoreService', () => {
     priceRepository = module.get(getRepositoryToken(Price));
     verificationRepository = module.get(getRepositoryToken(PriceVerification));
     userTrustScoreRepository = module.get(getRepositoryToken(UserTrustScore));
-    reactionRepository = module.get(getRepositoryToken(PriceReaction));
     userTrustScoreCalculator = module.get(UserTrustScoreCalculator);
     priceTrustScoreCalculator = module.get(PriceTrustScoreCalculator);
   });

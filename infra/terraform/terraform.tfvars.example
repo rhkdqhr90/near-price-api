@@ -44,9 +44,9 @@ enable_monitoring  = false              # CloudWatch 상세 모니터링 (비용
 # ─────────────────────────────────────────────
 db_allocated_storage     = 20
 db_instance_class        = "db.t3.micro"         # 프리 티어 가능
-db_engine_version        = "16.1"
+db_engine_version        = "16.13"
 db_name                  = "nearprice"
-db_username              = "admin"
+db_username              = "nearprice_admin"
 db_password              = "CHANGE_ME_!Strong#Password"  # ⚠ 반드시 변경!
 db_backup_retention_days = 7
 db_backup_window         = "02:00-03:00"          # UTC (한국시간: 오전 11시)

@@ -152,8 +152,6 @@ resource "aws_vpc_security_group_ingress_rule" "api_ssh" {
 resource "aws_vpc_security_group_egress_rule" "api_outbound_all" {
   description       = "Allow all outbound (Kakao OAuth, Firebase FCM, etc.)"
   ip_protocol       = "-1"
-  from_port         = 0
-  to_port           = 0
   cidr_ipv4         = "0.0.0.0/0"
   security_group_id = aws_security_group.api_server.id
 
@@ -192,8 +190,6 @@ resource "aws_vpc_security_group_ingress_rule" "rds_from_ec2" {
 resource "aws_vpc_security_group_egress_rule" "rds_outbound_vpc" {
   description       = "Allow outbound within VPC only"
   ip_protocol       = "-1"
-  from_port         = 0
-  to_port           = 0
   cidr_ipv4         = var.vpc_cidr
   security_group_id = aws_security_group.rds_postgres.id
 
@@ -235,8 +231,6 @@ resource "aws_vpc_security_group_egress_rule" "redis_outbound_vpc" {
   count             = var.enable_elasticache ? 1 : 0
   description       = "Allow outbound within VPC only"
   ip_protocol       = "-1"
-  from_port         = 0
-  to_port           = 0
   cidr_ipv4         = var.vpc_cidr
   security_group_id = aws_security_group.elasticache_redis[0].id
 
