@@ -46,6 +46,9 @@ lerna-debug.log*
 .temp
 .tmp
 
+# 로컬 업로드(과거 다중 드라이버 잔존) — 현재는 S3만 사용
+/uploads/
+
 # Runtime data
 pids
 *.pid

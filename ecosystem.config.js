@@ -65,31 +65,8 @@ module.exports = {
 
       // 기타
       merge_logs: true,
-      autorestart: true,
       wait_ready: true,  // 앱이 준비되었음을 신호할 때까지 대기
-      // listen_timeout: 3000,
-      // kill_timeout: 5000,
     },
   ],
-
-  // 배포 설정
-  deploy: {
-    production: {
-      user: 'ec2-user',
-      host: ['aws_ec2_ip_address'],  // AWS EC2 Elastic IP로 변경
-      ref: 'origin/main',
-      repo: 'https://github.com/your-org/near-price-api.git',  // GitHub 저장소 URL로 변경
-      path: '/home/ec2-user/near-price-api/prod',
-      'post-deploy': 'npm ci --production && npm run build && npm run typeorm:migration:run && pm2 reload ecosystem.config.js --env production',
-      'pre-deploy-local': 'echo "배포 시작..."',
-    },
-    staging: {
-      user: 'ec2-user',
-      host: ['aws_ec2_ip_address'],
-      ref: 'origin/develop',
-      repo: 'https://github.com/your-org/near-price-api.git',
-      path: '/home/ec2-user/near-price-api/staging',
-      'post-deploy': 'npm ci --production && npm run build && pm2 reload ecosystem.config.js',
-    },
-  },
+  // 배포는 Terraform + EC2 user-data로 처리 (pm2 deploy 미사용)
 };

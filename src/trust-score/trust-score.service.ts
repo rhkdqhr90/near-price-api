@@ -192,14 +192,16 @@ export class TrustScoreService {
           ? (alignedCount / recentVerifications.length) * 100
           : 50;
 
+      // KST 기준 일자 그룹핑 (UTC로 하면 한국 사용자 자정~09시 활동이 전날로 귀속됨)
+      const toKstDateKey = (d: Date): string =>
+        new Date(d.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
       const activeDaySet = new Set<string>();
       recentPrices
         .filter((p) => p.createdAt >= thirtyDaysAgo)
-        .forEach((p) =>
-          activeDaySet.add(p.createdAt.toISOString().slice(0, 10)),
-        );
+        .forEach((p) => activeDaySet.add(toKstDateKey(p.createdAt)));
       recentVerifications.forEach((v) =>
-        activeDaySet.add(v.createdAt.toISOString().slice(0, 10)),
+        activeDaySet.add(toKstDateKey(v.createdAt)),
       );
 
       const result = this.userTrustScoreCalculator.calculateUserTrustScore({
