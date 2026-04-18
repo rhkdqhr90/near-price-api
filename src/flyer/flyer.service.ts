@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Flyer } from './entities/flyer.entity';
 import { OwnerPost } from './entities/owner-post.entity';
 import { CreateFlyerDto } from './dto/create-flyer.dto';
@@ -78,16 +78,27 @@ export class FlyerService {
         skip,
       });
       if (users.length === 0) break;
-      const results = await Promise.allSettled(
-        users
-          .filter((u) => u.fcmToken)
-          .map((u) =>
-            this.notificationService.sendToUser(u.fcmToken!, title, body),
-          ),
-      );
-      const failed = results.filter((r) => r.status === 'rejected').length;
-      if (failed > 0)
-        this.logger.warn(`FCM 전단지 알림 전송 실패: ${failed}건`);
+
+      const tokens = users
+        .map((u) => u.fcmToken)
+        .filter((t): t is string => !!t);
+
+      if (tokens.length > 0) {
+        const failedTokens = await this.notificationService.sendToMany(
+          tokens,
+          title,
+          body,
+        );
+
+        // 만료/무효 토큰 정리
+        if (failedTokens.length > 0) {
+          await this.userRepository.update(
+            { fcmToken: In(failedTokens) },
+            { fcmToken: null },
+          );
+        }
+      }
+
       skip += BATCH_SIZE;
       if (users.length < BATCH_SIZE) break;
     }
