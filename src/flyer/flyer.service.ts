@@ -57,6 +57,7 @@ export class FlyerService {
     this.sendFlyerNotifications(
       `${saved.storeName} 새 전단지`,
       saved.promotionTitle,
+      saved.id,
     ).catch((err: unknown) =>
       this.logger.warn('전단지 FCM 알림 실패', (err as Error)?.message),
     );
@@ -67,36 +68,41 @@ export class FlyerService {
   private async sendFlyerNotifications(
     title: string,
     body: string,
+    flyerId: string,
   ): Promise<void> {
     const BATCH_SIZE = 500;
     let skip = 0;
     while (true) {
       const users = await this.userRepository.find({
         where: { notifPromotion: true },
-        select: ['fcmToken'],
+        select: ['id', 'fcmToken'],
         take: BATCH_SIZE,
         skip,
       });
       if (users.length === 0) break;
 
-      const tokens = users
-        .map((u) => u.fcmToken)
-        .filter((t): t is string => !!t);
+      const pairs = users.map((u) => ({
+        userId: u.id,
+        fcmToken: u.fcmToken ?? null,
+      }));
 
-      if (tokens.length > 0) {
-        const failedTokens = await this.notificationService.sendToMany(
-          tokens,
+      const failedTokens = await this.notificationService.createAndPushMany(
+        pairs,
+        {
+          type: 'system',
           title,
           body,
-        );
+          linkType: 'url',
+          linkId: `nearprice://flyer/${flyerId}`,
+        },
+      );
 
-        // 만료/무효 토큰 정리
-        if (failedTokens.length > 0) {
-          await this.userRepository.update(
-            { fcmToken: In(failedTokens) },
-            { fcmToken: null },
-          );
-        }
+      // 만료/무효 토큰 정리
+      if (failedTokens.length > 0) {
+        await this.userRepository.update(
+          { fcmToken: In(failedTokens) },
+          { fcmToken: null },
+        );
       }
 
       skip += BATCH_SIZE;

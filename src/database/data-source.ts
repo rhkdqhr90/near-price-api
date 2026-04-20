@@ -17,6 +17,7 @@ import { UserBadge } from '../badge/entities/user-badge.entity';
 import { Inquiry } from '../inquiry/entities/inquiry.entity';
 import { Flyer } from '../flyer/entities/flyer.entity';
 import { OwnerPost } from '../flyer/entities/owner-post.entity';
+import { Notification } from '../notification/entities/notification.entity';
 
 config();
 
@@ -54,6 +55,7 @@ export const AppDataSource = new DataSource({
     Inquiry,
     Flyer,
     OwnerPost,
+    Notification,
   ],
   migrations: [__dirname + '/migrations/*.{ts,js}'],
   synchronize: false,

@@ -99,21 +99,29 @@ export class PriceService {
       relations: ['user'],
     });
 
-    const tokens = wishlists
+    const pairs = wishlists
       .filter(
         (w) =>
-          w.user?.id !== registeredByUserId &&
-          w.user?.fcmToken != null &&
+          w.user?.id &&
+          w.user.id !== registeredByUserId &&
           w.user?.notifPriceChange,
       )
-      .map((w) => w.user.fcmToken!);
+      .map((w) => ({
+        userId: w.user.id,
+        fcmToken: w.user.fcmToken ?? null,
+      }));
 
-    if (tokens.length === 0) return;
+    if (pairs.length === 0) return;
 
-    const failedTokens = await this.notificationService.sendToMany(
-      tokens,
-      '찜한 상품 새 가격',
-      `"${productName}" 가격이 새로 등록됐어요: ${price.toLocaleString()}원`,
+    const failedTokens = await this.notificationService.createAndPushMany(
+      pairs,
+      {
+        type: 'wishlistLowered',
+        title: '찜한 상품 새 가격',
+        body: `"${productName}" 가격이 새로 등록됐어요: ${price.toLocaleString()}원`,
+        linkType: 'product',
+        linkId: productId,
+      },
     );
 
     // 만료/무효 토큰 정리
@@ -180,12 +188,13 @@ export class PriceService {
       relations: ['store', 'product', 'user'],
     });
 
-    // 4. 상품별 집계 (maxPrice, storeCount)
+    // 4. 상품별 집계 (maxPrice, avgPrice, storeCount)
     const productIds = cheapestPrices.map((p) => p.product.id);
     const aggregates = await this.priceRepository
       .createQueryBuilder('p')
       .select('p.product_id', 'productId')
       .addSelect('MAX(p.price)', 'maxPrice')
+      .addSelect('AVG(p.price)', 'avgPrice')
       .addSelect('COUNT(DISTINCT p.store_id)', 'storeCount')
       .where('p.product_id IN (:...productIds)', { productIds })
       .andWhere('p.isActive = true')
@@ -193,10 +202,26 @@ export class PriceService {
       .getRawMany<{
         productId: string;
         maxPrice: string;
+        avgPrice: string;
         storeCount: string;
       }>();
 
     const aggMap = new Map(aggregates.map((a) => [a.productId, a]));
+
+    // 4-1. 상품별 최근 7일 최저가 (isLowest7d 판정용)
+    const lowest7dRows = await this.dataSource.query<
+      { product_id: string; min7d: string }[]
+    >(
+      `SELECT product_id, MIN(price)::text as min7d
+       FROM prices
+       WHERE product_id = ANY($1)
+         AND "createdAt" >= NOW() - INTERVAL '7 days'
+       GROUP BY product_id`,
+      [productIds],
+    );
+    const lowest7dMap = new Map(
+      lowest7dRows.map((r) => [r.product_id, parseFloat(r.min7d)]),
+    );
 
     // 5. 가격별 맞아요(CONFIRM) 반응 수 집계
     const verCounts = await this.dataSource.query<
@@ -220,13 +245,21 @@ export class PriceService {
 
     const data: ProductPriceCardDto[] = sorted.map((p) => {
       const agg = aggMap.get(p.product.id);
+      const minPrice = p.price;
+      const maxPrice = parseFloat(agg?.maxPrice ?? String(p.price));
+      const storeCount = parseInt(agg?.storeCount ?? '1', 10);
+      const hasClosingDiscount =
+        p.priceTagType === 'closing' ||
+        (p.condition?.includes('마감') ?? false);
+      const verificationCount = verCountMap.get(p.id) ?? 0;
+
       return {
         productId: p.product.id,
         productName: p.product.name,
         unitType: p.product.unitType ?? null,
-        minPrice: p.price,
-        maxPrice: parseFloat(agg?.maxPrice ?? String(p.price)),
-        storeCount: parseInt(agg?.storeCount ?? '1', 10),
+        minPrice,
+        maxPrice,
+        storeCount,
         cheapestStore: p.store
           ? {
               id: p.store.id,
@@ -237,8 +270,8 @@ export class PriceService {
           : null,
         imageUrl: p.imageUrl ?? null,
         quantity: p.quantity != null ? String(p.quantity) : null,
-        hasClosingDiscount: p.condition?.includes('마감') ?? false,
-        verificationCount: verCountMap.get(p.id) ?? 0,
+        hasClosingDiscount,
+        verificationCount,
         createdAt: p.createdAt,
         registrant: p.user
           ? {
@@ -246,6 +279,32 @@ export class PriceService {
               profileImageUrl: p.user.profileImageUrl ?? null,
             }
           : null,
+        priceTag: {
+          type: p.priceTagType,
+          originalPrice: p.originalPrice,
+          bundleType: p.bundleType,
+          bundleQty: p.bundleQty,
+          flatGroupName: p.flatGroupName,
+          memberPrice: p.memberPrice,
+          endsAt: p.endsAt,
+          cardLabel: p.cardLabel,
+          cardDiscountType: p.cardDiscountType,
+          cardDiscountValue: p.cardDiscountValue,
+          cardConditionNote: p.cardConditionNote,
+          note: p.note,
+        },
+        signals: {
+          storeCount,
+          minPrice,
+          maxPrice,
+          avgPrice:
+            agg?.avgPrice != null ? Math.round(parseFloat(agg.avgPrice)) : null,
+          isLowest7d:
+            lowest7dMap.has(p.product.id) &&
+            minPrice <= (lowest7dMap.get(p.product.id) ?? Infinity),
+          hasClosingDiscount,
+          verificationCount,
+        },
       };
     });
 

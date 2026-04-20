@@ -179,6 +179,7 @@ export class PriceVerificationService {
       this.sendVerificationNotification(
         price.user ?? null,
         createVerificationDto.result,
+        price.id,
       ).catch((err: unknown) =>
         this.logger.warn('검증 알림 전송 실패', (err as Error)?.message),
       );
@@ -200,13 +201,21 @@ export class PriceVerificationService {
   private async sendVerificationNotification(
     priceOwner: User | null,
     result: VerificationResult,
+    priceId: string,
   ): Promise<void> {
-    if (!priceOwner?.fcmToken) return;
-    const label = result === VerificationResult.CONFIRMED ? '맞아요' : '달라요';
-    await this.notificationService.sendToUser(
-      priceOwner.fcmToken,
-      '가격 검증 도착',
-      `누군가 회원님의 가격에 "${label}"를 남겼어요.`,
+    if (!priceOwner?.id) return;
+    const isConfirmed = result === VerificationResult.CONFIRMED;
+    const label = isConfirmed ? '맞아요' : '달라요';
+    await this.notificationService.createAndPush(
+      priceOwner.id,
+      priceOwner.fcmToken ?? null,
+      {
+        type: isConfirmed ? 'priceVerified' : 'priceDisputed',
+        title: '가격 검증 도착',
+        body: `누군가 회원님의 가격에 "${label}"를 남겼어요.`,
+        linkType: 'price',
+        linkId: priceId,
+      },
     );
   }
 
@@ -222,12 +231,16 @@ export class PriceVerificationService {
       where: { id: verifierId },
       select: ['id', 'fcmToken'],
     });
-    if (!verifier?.fcmToken) return;
+    if (!verifier) return;
 
-    await this.notificationService.sendToUser(
-      verifier.fcmToken,
-      '새 뱃지 획득!',
-      `"${badgeName}" 뱃지를 획득했어요!`,
+    await this.notificationService.createAndPush(
+      verifier.id,
+      verifier.fcmToken ?? null,
+      {
+        type: 'system',
+        title: '새 뱃지 획득!',
+        body: `"${badgeName}" 뱃지를 획득했어요!`,
+      },
     );
   }
 
