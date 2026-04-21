@@ -5,7 +5,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { Repository, DataSource, SelectQueryBuilder, MoreThan } from 'typeorm';
+import { Repository, DataSource, SelectQueryBuilder } from 'typeorm';
 import { PriceVerificationService } from './price-verification.service';
 import {
   PriceVerification,
@@ -178,7 +178,7 @@ describe('PriceVerificationService', () => {
         {
           provide: NotificationService,
           useValue: {
-            sendToUser: jest.fn().mockResolvedValue(undefined),
+            createAndPush: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],
@@ -214,7 +214,7 @@ describe('PriceVerificationService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('24시간 이내 중복 검증 → ForbiddenException', async () => {
+    it('이미 검증한 가격이면 다시 검증 불가 → ForbiddenException', async () => {
       priceRepository.findOne.mockResolvedValue(mockPrice);
       userRepository.findOne.mockResolvedValue(mockVerifier);
 
@@ -233,7 +233,7 @@ describe('PriceVerificationService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('24시간 이내 중복 검증 확인 시 MoreThan(since24h) 조건으로 쿼리', async () => {
+    it('중복 검증 확인 시 price + verifier 조건으로 조회', async () => {
       priceRepository.findOne.mockResolvedValue(mockPrice);
       userRepository.findOne.mockResolvedValue(mockVerifier);
 
@@ -253,65 +253,20 @@ describe('PriceVerificationService', () => {
       qr.manager.create.mockReturnValue(savedVerification);
       qr.manager.save.mockResolvedValue(savedVerification);
 
-      const beforeCall = Date.now();
       await service.createVerification(PRICE_ID, VERIFIER_ID, {
         result: VerificationResult.CONFIRMED,
       });
-      const afterCall = Date.now();
 
-      // queryRunner.manager.findOne이 호출되었고 where 조건에 MoreThan이 포함되는지 확인
+      // queryRunner.manager.findOne이 호출되었고 where 조건이 전달되는지 확인
       expect(qr.manager.findOne).toHaveBeenCalledWith(
         PriceVerification,
         expect.objectContaining({
           where: expect.objectContaining({
             price: { id: PRICE_ID },
             verifier: { id: VERIFIER_ID },
-            createdAt: expect.anything(), // MoreThan(since24h)
           }),
         }),
       );
-
-      // 전달된 createdAt 값이 24시간 이전 범위인지 검증
-      const callArgs = qr.manager.findOne.mock.calls[0][1] as {
-        where: { createdAt: ReturnType<typeof MoreThan> };
-      };
-      const since24hValue = callArgs.where.createdAt.value as Date;
-      const expectedSince24h = new Date(beforeCall - 24 * 60 * 60 * 1000);
-      const expectedSince24hAfter = new Date(afterCall - 24 * 60 * 60 * 1000);
-      // since24h가 24시간 전과 가까운지 확인 (±5초 오차 허용)
-      expect(since24hValue.getTime()).toBeGreaterThanOrEqual(
-        expectedSince24h.getTime() - 5000,
-      );
-      expect(since24hValue.getTime()).toBeLessThanOrEqual(
-        expectedSince24hAfter.getTime() + 5000,
-      );
-    });
-
-    it('25시간 전 검증은 중복으로 처리하지 않음 (24시간 외)', async () => {
-      priceRepository.findOne.mockResolvedValue(mockPrice);
-      userRepository.findOne.mockResolvedValue(mockVerifier);
-
-      // qr.manager.findOne이 null을 반환하면 중복 없음으로 처리
-      const qr = makeQueryRunnerMock(null);
-      (dataSource.createQueryRunner as jest.Mock).mockReturnValue(qr);
-
-      const savedVerification: PriceVerification = {
-        id: 'new-v-uuid',
-        price: mockPrice,
-        verifier: mockVerifier,
-        result: VerificationResult.CONFIRMED,
-        actualPrice: null,
-        newPrice: null,
-        createdAt: new Date(),
-      };
-      qr.manager.create.mockReturnValue(savedVerification);
-      qr.manager.save.mockResolvedValue(savedVerification);
-
-      // 중복 없음(null) → 정상 진행
-      const result = await service.createVerification(PRICE_ID, VERIFIER_ID, {
-        result: VerificationResult.CONFIRMED,
-      });
-      expect(result.id).toBe('new-v-uuid');
     });
 
     it('검증자 없음 → NotFoundException', async () => {
@@ -560,10 +515,15 @@ describe('PriceVerificationService', () => {
 
       // fire-and-forget이라 즉시 확인하면 호출 전일 수 있으므로 짧게 대기
       await new Promise((resolve) => setTimeout(resolve, 10));
-      expect(notificationService.sendToUser).toHaveBeenCalledWith(
+      expect(notificationService.createAndPush).toHaveBeenCalledWith(
+        PRICE_OWNER_ID,
         'owner-fcm-token',
-        '가격 검증 도착',
-        expect.stringContaining('맞아요'),
+        expect.objectContaining({
+          title: '가격 검증 도착',
+          body: expect.stringContaining('맞아요'),
+          linkType: 'price',
+          linkId: PRICE_ID,
+        }),
       );
     });
   });

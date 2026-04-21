@@ -37,3 +37,12 @@ export class VerificationListResponseDto {
     disputedCount: number;
   };
 }
+
+export class MyVerificationByPriceResponseDto {
+  id: string;
+  priceId: string;
+  result: VerificationResult;
+  actualPrice: number | null;
+  newPriceId: string | null;
+  createdAt: Date;
+}

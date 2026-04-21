@@ -21,7 +21,25 @@ export class ProductService {
   async create(
     createProductDto: CreateProductDto,
   ): Promise<ProductResponseDto> {
-    const create = this.productRepository.create(createProductDto);
+    const normalizedName = createProductDto.name.trim();
+
+    const existing = await this.productRepository
+      .createQueryBuilder('product')
+      .where('LOWER(product.name) = LOWER(:name)', { name: normalizedName })
+      .andWhere('product.unitType = :unitType', {
+        unitType: createProductDto.unitType,
+      })
+      .orderBy('product.createdAt', 'DESC')
+      .getOne();
+
+    if (existing) {
+      return ProductResponseDto.from(existing);
+    }
+
+    const create = this.productRepository.create({
+      ...createProductDto,
+      name: normalizedName,
+    });
     const saved = await this.productRepository.save(create);
     await this.productSearchService.indexProduct(saved);
     return ProductResponseDto.from(saved);

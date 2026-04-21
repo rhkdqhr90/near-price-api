@@ -8,6 +8,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import * as express from 'express';
 import type { Request, Response, NextFunction } from 'express';
+import { join } from 'path';
 
 async function bootstrap() {
   // Sentry 초기화 (SENTRY_DSN 환경변수 설정 시 활성화)
@@ -67,6 +68,20 @@ async function bootstrap() {
       extended: true,
     }),
   );
+
+  // 로컬 업로드 파일 정적 서빙 (개발 환경 전용)
+  if (process.env.NODE_ENV !== 'production') {
+    const localUploadDir =
+      process.env.LOCAL_UPLOAD_DIR?.trim() || join(process.cwd(), 'uploads');
+    app.use(
+      '/uploads',
+      express.static(localUploadDir, {
+        dotfiles: 'deny',
+        index: false,
+        fallthrough: true,
+      }),
+    );
+  }
 
   // HTTPS 리다이렉트 미들웨어 (프로덕션 환경)
   // Host 헤더는 공격자가 조작 가능하므로 환경변수의 허용 도메인만 사용

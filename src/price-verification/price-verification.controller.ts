@@ -17,6 +17,7 @@ import { CreateVerificationDto } from './dto/create-verification.dto';
 import {
   VerificationResponseDto,
   VerificationListResponseDto,
+  MyVerificationByPriceResponseDto,
 } from './dto/verification-response.dto';
 import { VerificationResult } from './entities/price-verification.entity';
 
@@ -67,6 +68,22 @@ export class PriceVerificationController {
       user.userId,
       pageNum,
       limitNum,
+    );
+  }
+
+  /**
+   * GET /prices/:priceId/verifications/me
+   * 특정 가격에 대해 내가 남긴 검증 1건 조회
+   */
+  @Get(':priceId/verifications/me')
+  @UseGuards(JwtAuthGuard)
+  async getMyVerificationByPrice(
+    @Param('priceId', ParseUUIDPipe) priceId: string,
+    @CurrentUser() user: AuthUser,
+  ): Promise<MyVerificationByPriceResponseDto | null> {
+    return await this.verificationService.getMyVerificationByPrice(
+      priceId,
+      user.userId,
     );
   }
 

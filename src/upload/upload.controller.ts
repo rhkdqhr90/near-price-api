@@ -64,6 +64,6 @@ export class UploadController {
       throw new BadRequestException('허용되지 않는 파일 형식입니다.');
     }
 
-    return await this.uploadService.uploadToS3(file);
+    return await this.uploadService.upload(file);
   }
 }

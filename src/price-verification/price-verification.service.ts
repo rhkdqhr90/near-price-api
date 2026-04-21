@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan, DataSource } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import {
   PriceVerification,
   VerificationResult,
@@ -14,6 +14,7 @@ import {
 import { CreateVerificationDto } from './dto/create-verification.dto';
 import {
   VerificationDetailDto,
+  MyVerificationByPriceResponseDto,
   VerificationResponseDto,
 } from './dto/verification-response.dto';
 import { Price } from '../price/entities/price.entity';
@@ -93,22 +94,20 @@ export class PriceVerificationService {
     await queryRunner.startTransaction();
 
     try {
-      // 24시간 내 중복 검증 확인 (race condition 방지: SELECT FOR UPDATE)
-      const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      // 중복 검증 확인 (race condition 방지: SELECT FOR UPDATE)
       const existingVerification = await queryRunner.manager.findOne(
         PriceVerification,
         {
           where: {
             price: { id: priceId },
             verifier: { id: userId },
-            createdAt: MoreThan(since24h),
           },
           lock: { mode: 'pessimistic_write' },
         },
       );
 
       if (existingVerification) {
-        throw new ForbiddenException('24시간 이내에 이미 검증했습니다');
+        throw new ForbiddenException('이미 검증에 참여했습니다');
       }
 
       // 검증 생성
@@ -369,6 +368,45 @@ export class PriceVerificationService {
           createdAt: v.createdAt,
         })),
       meta: { total },
+    };
+  }
+
+  /**
+   * 특정 가격에 대해 내가 남긴 검증 1건 조회
+   */
+  async getMyVerificationByPrice(
+    priceId: string,
+    verifierId: string,
+  ): Promise<MyVerificationByPriceResponseDto | null> {
+    const price = await this.priceRepository.findOne({
+      where: { id: priceId },
+    });
+
+    if (!price) {
+      throw new NotFoundException('가격 데이터를 찾을 수 없습니다');
+    }
+
+    const verification = await this.verificationRepository
+      .createQueryBuilder('v')
+      .leftJoin('v.price', 'price')
+      .leftJoin('v.verifier', 'verifier')
+      .leftJoinAndSelect('v.newPrice', 'newPrice')
+      .where('price.id = :priceId', { priceId })
+      .andWhere('verifier.id = :verifierId', { verifierId })
+      .orderBy('v.createdAt', 'DESC')
+      .getOne();
+
+    if (!verification) {
+      return null;
+    }
+
+    return {
+      id: verification.id,
+      priceId,
+      result: verification.result,
+      actualPrice: verification.actualPrice,
+      newPriceId: verification.newPrice?.id ?? null,
+      createdAt: verification.createdAt,
     };
   }
 

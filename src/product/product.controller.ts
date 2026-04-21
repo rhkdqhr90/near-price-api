@@ -29,7 +29,7 @@ export class ProductController {
   constructor(private readonly productService: ProductService) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard, AdminGuard)
+  @UseGuards(JwtAuthGuard)
   async create(
     @Body() createProductDto: CreateProductDto,
   ): Promise<ProductResponseDto> {
