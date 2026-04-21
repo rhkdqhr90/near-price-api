@@ -287,7 +287,8 @@ describe('WishlistService', () => {
       expect(item.productId).toBe(PRODUCT_ID);
       expect(item.productName).toBe('사과');
       expect(item.category).toBe(ProductCategory.FRUIT);
-      expect(item.unitType).toBe(UnitType.COUNT);
+      // unitType이 product에서 price로 이관되어, prices가 비어있으면 null.
+      expect(item.unitType).toBeNull();
       expect(item.addedAt).toEqual(new Date('2024-06-01'));
     });
 

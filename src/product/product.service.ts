@@ -26,8 +26,8 @@ export class ProductService {
     const existing = await this.productRepository
       .createQueryBuilder('product')
       .where('LOWER(product.name) = LOWER(:name)', { name: normalizedName })
-      .andWhere('product.unitType = :unitType', {
-        unitType: createProductDto.unitType,
+      .andWhere('product.category = :category', {
+        category: createProductDto.category,
       })
       .orderBy('product.createdAt', 'DESC')
       .getOne();

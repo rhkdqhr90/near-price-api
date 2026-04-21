@@ -21,17 +21,8 @@ export enum ProductCategory {
   OTHER = 'other', // 기타
 }
 
-export enum UnitType {
-  GRAM = 'g',
-  KILOGRAM = 'kg',
-  MILLILITER = 'ml',
-  LITER = 'l',
-  COUNT = 'count', // 개
-  BUNCH = 'bunch', // 묶음
-  PACK = 'pack', // 팩
-  BAG = 'bag', // 망
-  OTHER = 'other', // 기타 (사진으로 판단)
-}
+// UnitType enum은 Price 엔티티로 이관됨. 별도 파일에서 re-export (하위 호환).
+export { UnitType } from './unit-type.enum';
 
 @Entity('products')
 export class Product {

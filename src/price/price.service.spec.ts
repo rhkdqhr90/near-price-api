@@ -45,7 +45,6 @@ function buildProduct(overrides: Partial<Product> = {}): Product {
   product.id = PRODUCT_UUID;
   product.name = '신라면';
   product.category = ProductCategory.PROCESSED;
-  product.unitType = UnitType.COUNT;
   product.prices = [];
   product.createdAt = new Date('2025-01-01');
   product.updatedAt = new Date('2025-01-01');
@@ -79,6 +78,7 @@ function buildPrice(
   price.user = null as unknown as User;
   price.price = 1200;
   price.quantity = null;
+  price.unitType = UnitType.COUNT;
   price.imageUrl = 'https://example.com/image.jpg';
   price.saleStartDate = null as unknown as Date;
   price.saleEndDate = null as unknown as Date;

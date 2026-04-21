@@ -4,7 +4,7 @@ import { NotFoundException } from '@nestjs/common';
 import { ILike, Repository } from 'typeorm';
 import { DataSource } from 'typeorm';
 import { ProductService } from './product.service';
-import { Product, ProductCategory, UnitType } from './entities/product.entity';
+import { Product, ProductCategory } from './entities/product.entity';
 import { ProductSearchService } from './product-search.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -19,7 +19,6 @@ function buildProduct(overrides: Partial<Product> = {}): Product {
   product.id = PRODUCT_UUID;
   product.name = '신라면';
   product.category = ProductCategory.PROCESSED;
-  product.unitType = UnitType.COUNT;
   product.prices = [];
   product.createdAt = new Date('2025-01-01');
   product.updatedAt = new Date('2025-01-01');
@@ -44,6 +43,12 @@ describe('ProductService', () => {
             find: jest.fn(),
             findOne: jest.fn(),
             remove: jest.fn(),
+            createQueryBuilder: jest.fn(() => ({
+              where: jest.fn().mockReturnThis(),
+              andWhere: jest.fn().mockReturnThis(),
+              orderBy: jest.fn().mockReturnThis(),
+              getOne: jest.fn().mockResolvedValue(null),
+            })),
           },
         },
         {
@@ -82,7 +87,6 @@ describe('ProductService', () => {
       const dto: CreateProductDto = {
         name: '신라면',
         category: ProductCategory.PROCESSED,
-        unitType: UnitType.COUNT,
       };
       const productEntity = buildProduct();
 
@@ -101,18 +105,15 @@ describe('ProductService', () => {
       expect(result.id).toBe(PRODUCT_UUID);
       expect(result.name).toBe('신라면');
       expect(result.category).toBe(ProductCategory.PROCESSED);
-      expect(result.unitType).toBe(UnitType.COUNT);
     });
 
     it('저장 후 ElasticSearch 색인이 호출된다', async () => {
       const dto: CreateProductDto = {
         name: '진라면',
         category: ProductCategory.PROCESSED,
-        unitType: UnitType.PACK,
       };
       const productEntity = buildProduct({
         name: '진라면',
-        unitType: UnitType.PACK,
       });
 
       productRepo.create.mockReturnValue(productEntity);
@@ -131,12 +132,10 @@ describe('ProductService', () => {
       const dto: CreateProductDto = {
         name: '당근',
         category: ProductCategory.VEGETABLE,
-        unitType: UnitType.GRAM,
       };
       const productEntity = buildProduct({
         name: '당근',
         category: ProductCategory.VEGETABLE,
-        unitType: UnitType.GRAM,
       });
 
       productRepo.create.mockReturnValue(productEntity);
@@ -146,7 +145,6 @@ describe('ProductService', () => {
       const result = await service.create(dto);
 
       expect(result.category).toBe(ProductCategory.VEGETABLE);
-      expect(result.unitType).toBe(UnitType.GRAM);
     });
   });
 
@@ -271,15 +269,13 @@ describe('ProductService', () => {
       expect(result.name).toBe('신라면(매운맛)');
     });
 
-    it('category와 unitType도 함께 수정할 수 있다', async () => {
+    it('category도 함께 수정할 수 있다', async () => {
       const productEntity = buildProduct();
       const dto: UpdateProductDto = {
         category: ProductCategory.GRAIN,
-        unitType: UnitType.KILOGRAM,
       };
       const updatedEntity = buildProduct({
         category: ProductCategory.GRAIN,
-        unitType: UnitType.KILOGRAM,
       });
 
       productRepo.findOne.mockResolvedValue(productEntity);
@@ -289,7 +285,6 @@ describe('ProductService', () => {
       const result = await service.update(PRODUCT_UUID, dto);
 
       expect(result.category).toBe(ProductCategory.GRAIN);
-      expect(result.unitType).toBe(UnitType.KILOGRAM);
     });
 
     it('수정 후 ElasticSearch 색인이 호출된다', async () => {

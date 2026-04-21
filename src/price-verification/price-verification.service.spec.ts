@@ -13,6 +13,7 @@ import {
 } from './entities/price-verification.entity';
 import { Price } from '../price/entities/price.entity';
 import { User, UserRole } from '../user/entities/user.entity';
+import { UnitType } from '../product/entities/product.entity';
 import { PriceTrustScoreCalculator } from '../trust-score/services/price-trust-score.calculator';
 import { NotificationService } from '../notification/notification.service';
 
@@ -105,6 +106,7 @@ describe('PriceVerificationService', () => {
     product: { id: 'product-1', name: '우유' } as any,
     price: 2000,
     quantity: null,
+    unitType: UnitType.OTHER,
     imageUrl: '',
     saleStartDate: null,
     saleEndDate: null,

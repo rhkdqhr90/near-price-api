@@ -10,7 +10,8 @@ import {
 } from 'typeorm';
 import { User } from '../../user/entities/user.entity';
 import { Store } from '../../store/entities/store.entity';
-import { Product, UnitType } from '../../product/entities/product.entity';
+import { Product } from '../../product/entities/product.entity';
+import { UnitType } from '../../product/entities/unit-type.enum';
 
 /**
  * 가격표(PriceTag) 타입 시스템

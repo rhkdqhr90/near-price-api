@@ -14,6 +14,7 @@ import {
 } from './entities/price-reaction.entity';
 import { Price } from '../price/entities/price.entity';
 import { User, UserRole } from '../user/entities/user.entity';
+import { UnitType } from '../product/entities/product.entity';
 
 describe('PriceReactionService', () => {
   let service: PriceReactionService;
@@ -58,6 +59,7 @@ describe('PriceReactionService', () => {
     product: {} as any,
     price: 1000,
     quantity: null,
+    unitType: UnitType.OTHER,
     imageUrl: 'https://example.com/image.jpg',
     saleStartDate: null,
     saleEndDate: null,

@@ -10,7 +10,7 @@ import { DataSource, Repository } from 'typeorm';
 import { CreatePriceDto } from './dto/create-price.dto';
 import { PriceResponseDto } from './dto/price-response.dto';
 import { Store } from '../store/entities/store.entity';
-import { Product } from '../product/entities/product.entity';
+import { Product, UnitType } from '../product/entities/product.entity';
 import { User } from '../user/entities/user.entity';
 import { Wishlist } from '../wishlist/entities/wishlist.entity';
 import { UpdatePriceDto } from './dto/update-price.dto';
@@ -67,8 +67,10 @@ export class PriceService {
       throw new NotFoundException('존재하지 않는 사용자입니다.');
     }
 
+    const { unitType, ...rest } = createPriceDto;
     const price = this.priceRepository.create({
-      ...createPriceDto,
+      ...rest,
+      unitType: unitType ?? UnitType.OTHER,
       store,
       product,
       user,
@@ -256,7 +258,7 @@ export class PriceService {
       return {
         productId: p.product.id,
         productName: p.product.name,
-        unitType: p.product.unitType ?? null,
+        unitType: p.unitType ?? null,
         minPrice,
         maxPrice,
         storeCount,

@@ -8,7 +8,7 @@ export class WishlistItemResponseDto {
   productId: string;
   productName: string;
   category: ProductCategory;
-  unitType: UnitType;
+  unitType: UnitType | null;
   lowestPrice: number | null;
   lowestPriceStoreName: string | null;
   imageUrl: string | null;
@@ -20,11 +20,11 @@ export class WishlistItemResponseDto {
     dto.productId = wishlist.product.id;
     dto.productName = wishlist.product.name;
     dto.category = wishlist.product.category;
-    dto.unitType = wishlist.product.unitType;
     dto.addedAt = wishlist.createdAt;
 
     const prices = wishlist.product.prices ?? [];
     if (prices.length === 0) {
+      dto.unitType = null;
       dto.lowestPrice = null;
       dto.lowestPriceStoreName = null;
       dto.imageUrl = null;
@@ -32,6 +32,7 @@ export class WishlistItemResponseDto {
     } else {
       const lowest = prices.reduce((min, p) => (p.price < min.price ? p : min));
       const withImage = prices.find((p) => p.imageUrl) ?? null;
+      dto.unitType = lowest.unitType ?? null;
       dto.lowestPrice = lowest.price;
       dto.lowestPriceStoreName = lowest.store?.name ?? null;
       dto.imageUrl = withImage?.imageUrl ?? null;
