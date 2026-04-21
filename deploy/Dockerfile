@@ -5,6 +5,9 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
+# t3.micro 메모리 환경에서 Nest build OOM 방지
+ENV NODE_OPTIONS=--max-old-space-size=1024
+
 # 빌드 의존성 설치
 RUN apk add --no-cache python3 make g++
 

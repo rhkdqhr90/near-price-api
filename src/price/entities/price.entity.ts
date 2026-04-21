@@ -10,7 +10,7 @@ import {
 } from 'typeorm';
 import { User } from '../../user/entities/user.entity';
 import { Store } from '../../store/entities/store.entity';
-import { Product } from '../../product/entities/product.entity';
+import { Product, UnitType } from '../../product/entities/product.entity';
 
 /**
  * 가격표(PriceTag) 타입 시스템
@@ -74,6 +74,13 @@ export class Price {
     },
   })
   quantity: number | null;
+
+  @Column({
+    type: 'enum',
+    enum: UnitType,
+    default: UnitType.OTHER,
+  })
+  unitType: UnitType;
 
   // 사진 필수 (신뢰도의 핵심)
   @Column()

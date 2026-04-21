@@ -67,3 +67,6 @@ infra/terraform/terraform.tfstate.backup
 infra/terraform/terraform.tfstate.d/
 infra/terraform/crash.log
 infra/terraform/*.tfplan
+
+# Terraform 문서 초안(로컬 가이드) 커밋 제외
+infra/terraform/*.md

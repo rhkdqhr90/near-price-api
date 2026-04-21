@@ -47,13 +47,6 @@ export class Product {
   })
   category: ProductCategory;
 
-  @Column({
-    type: 'enum',
-    enum: UnitType,
-    default: UnitType.OTHER,
-  })
-  unitType: UnitType;
-
   @OneToMany(() => Price, (price) => price.product)
   prices: Price[];
 

@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsDate,
+  IsEnum,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -20,6 +21,7 @@ import type {
   CardDiscountType,
   PriceTagType,
 } from '../entities/price.entity';
+import { UnitType } from '../../product/entities/product.entity';
 
 const PRICE_TAG_TYPES: PriceTagType[] = [
   'normal',
@@ -52,6 +54,10 @@ export class CreatePriceDto {
   @IsNumber()
   @Min(0)
   quantity?: number;
+
+  @IsOptional()
+  @IsEnum(UnitType)
+  unitType?: UnitType;
 
   @IsNotEmpty()
   @IsString()
