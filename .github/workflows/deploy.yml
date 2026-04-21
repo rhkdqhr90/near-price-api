@@ -56,93 +56,98 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
 
     steps:
       - name: 저장소 체크아웃
         uses: actions/checkout@v4
 
-      - name: 빌드 아티팩트 다운로드
-        uses: actions/download-artifact@v4
+      - name: AWS 자격증명 설정
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          name: build-artifact
-          path: dist/
-
-      - name: SSH 키 설정
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'ap-northeast-2' }}
 
       - name: 배포 환경 결정
         id: env
         run: |
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             echo "environment=prod" >> $GITHUB_OUTPUT
-            echo "target_path=/home/ec2-user/near-price-api/prod" >> $GITHUB_OUTPUT
+            echo "instance_id=${{ secrets.PROD_EC2_INSTANCE_ID }}" >> $GITHUB_OUTPUT
           else
             echo "environment=staging" >> $GITHUB_OUTPUT
-            echo "target_path=/home/ec2-user/near-price-api/staging" >> $GITHUB_OUTPUT
+            echo "instance_id=${{ secrets.STAGING_EC2_INSTANCE_ID }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: 코드 배포
+      - name: 배포 아카이브 생성 및 S3 업로드
+        id: package
         run: |
-          rsync -avz \
-            --delete \
-            --exclude=node_modules \
-            --exclude=.env \
-            --exclude=.git \
-            -e "ssh -i ~/.ssh/deploy_key" \
-            ./ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ steps.env.outputs.target_path }}/
+          SHORT_SHA="${GITHUB_SHA::7}"
+          ARCHIVE_NAME="near-price-api-${SHORT_SHA}.tar.gz"
+          ARCHIVE_KEY="deploy/${ARCHIVE_NAME}"
+          git archive --format=tar.gz -o "$ARCHIVE_NAME" "$GITHUB_SHA"
+          aws s3 cp "$ARCHIVE_NAME" "s3://${{ secrets.DEPLOY_S3_BUCKET }}/${ARCHIVE_KEY}"
+          echo "archive_key=${ARCHIVE_KEY}" >> $GITHUB_OUTPUT
 
-      - name: 원격 서버에서 배포 실행
+      - name: SSM 배포 실행
+        id: ssm
         run: |
-          ssh -i ~/.ssh/deploy_key \
-            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
-            "bash -s" << 'EOF'
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${{ steps.env.outputs.instance_id }}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy near-price-api ${{ github.sha }} (${{ steps.env.outputs.environment }})" \
+            --parameters commands="[
+              \"set -euo pipefail\",
+              \"DEPLOY_BUCKET=${{ secrets.DEPLOY_S3_BUCKET }}\",
+              \"DEPLOY_KEY=${{ steps.package.outputs.archive_key }}\",
+              \"TARGET_PATH=/home/ec2-user/near-price-api\",
+              \"ARCHIVE_PATH=/tmp/near-price-api-deploy.tar.gz\",
+              \"aws s3 cp s3://\\${DEPLOY_BUCKET}/\\${DEPLOY_KEY} \\${ARCHIVE_PATH}\",
+              \"mkdir -p \\${TARGET_PATH}\",
+              \"tar --no-same-owner -xzf \\${ARCHIVE_PATH} -C \\${TARGET_PATH}\",
+              \"cd \\${TARGET_PATH}\",
+              \"docker compose -f deploy/docker-compose.yml --env-file .env up -d --build api nginx\",
+              \"docker exec near-price-api npm run typeorm:migration:run:prod\",
+              \"for i in 1 2 3 4 5; do code=\\$(curl -s -o /tmp/health.out -w \\\"%{http_code}\\\" http://localhost/health || true); if [ \\\"\\${code}\\\" = \\\"200\\\" ]; then break; fi; sleep 2; done\",
+              \"curl -s -o /tmp/price.out -w \\\"%{http_code}\\\" \\\"http://localhost/price/recent?page=1&limit=1\\\"\",
+              \"cat /tmp/health.out\",
+              \"cat /tmp/price.out\"
+            ]" \
+            --query 'Command.CommandId' \
+            --output text)
 
-            set -e
+          echo "command_id=${COMMAND_ID}" >> $GITHUB_OUTPUT
 
-            TARGET_PATH="${{ steps.env.outputs.target_path }}"
-            ENVIRONMENT="${{ steps.env.outputs.environment }}"
-
-            echo "=== 배포 시작 (환경: $ENVIRONMENT) ==="
-            echo "시간: $(date)"
-
-            # 디렉토리 이동
-            cd $TARGET_PATH
-
-            # 의존성 설치
-            echo "의존성 설치 중..."
-            npm ci --omit=dev --legacy-peer-deps
-
-            # 데이터베이스 마이그레이션
-            echo "데이터베이스 마이그레이션 실행..."
-            npm run typeorm:migration:run:prod
-
-            # PM2로 애플리케이션 재시작
-            echo "애플리케이션 재시작 중..."
-            if pm2 list | grep -q "near-price"; then
-              pm2 reload near-price --update-env
-            else
-              pm2 start ecosystem.config.js --name near-price
+          for _ in {1..80}; do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "${COMMAND_ID}" \
+              --instance-id "${{ steps.env.outputs.instance_id }}" \
+              --query 'Status' \
+              --output text)
+            echo "SSM status: ${STATUS}"
+            if [ "${STATUS}" = "Success" ] || [ "${STATUS}" = "Failed" ] || [ "${STATUS}" = "Cancelled" ] || [ "${STATUS}" = "TimedOut" ]; then
+              break
             fi
+            sleep 15
+          done
 
-            # PM2 저장
-            pm2 save
+          aws ssm get-command-invocation \
+            --command-id "${COMMAND_ID}" \
+            --instance-id "${{ steps.env.outputs.instance_id }}" \
+            --query '{Status:Status,Stdout:StandardOutputContent,Stderr:StandardErrorContent}'
 
-            # 헬스체크 (3초 대기 후 확인)
-            sleep 3
-            if curl -f http://localhost:3000/health 2>/dev/null; then
-              echo "=== 배포 성공 ==="
-            else
-              echo "=== 헬스체크 실패 - 롤백 시도 ==="
-              pm2 restart near-price
-              exit 1
-            fi
-          EOF
+          FINAL_STATUS=$(aws ssm get-command-invocation \
+            --command-id "${COMMAND_ID}" \
+            --instance-id "${{ steps.env.outputs.instance_id }}" \
+            --query 'Status' \
+            --output text)
+
+          if [ "${FINAL_STATUS}" != "Success" ]; then
+            echo "SSM deployment failed: ${FINAL_STATUS}"
+            exit 1
+          fi
 
       - name: 배포 알림 (성공)
         if: success()
