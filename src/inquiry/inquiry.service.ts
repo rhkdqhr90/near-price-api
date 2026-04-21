@@ -5,6 +5,7 @@ import { Inquiry } from './entities/inquiry.entity';
 import { CreateInquiryDto } from './dto/create-inquiry.dto';
 import { InquiryResponseDto } from './dto/inquiry-response.dto';
 import { User } from '../user/entities/user.entity';
+import { InquiryMailService } from './inquiry-mail.service';
 
 @Injectable()
 export class InquiryService {
@@ -13,6 +14,7 @@ export class InquiryService {
     private readonly inquiryRepository: Repository<Inquiry>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly inquiryMailService: InquiryMailService,
   ) {}
 
   async create(
@@ -25,10 +27,20 @@ export class InquiryService {
     }
     const inquiry = this.inquiryRepository.create({
       ...createInquiryDto,
+      email: user.email,
       user,
     });
 
     const saved = await this.inquiryRepository.save(inquiry);
+
+    await this.inquiryMailService.sendInquiryCreatedEmails({
+      inquiryId: saved.id,
+      title: saved.title,
+      content: saved.content,
+      userEmail: saved.email,
+      createdAt: saved.createdAt,
+    });
+
     return InquiryResponseDto.from(saved);
   }
 

@@ -7,6 +7,7 @@ import { Inquiry, InquiryStatus } from './entities/inquiry.entity';
 import { CreateInquiryDto } from './dto/create-inquiry.dto';
 import { InquiryResponseDto } from './dto/inquiry-response.dto';
 import { User, UserRole } from '../user/entities/user.entity';
+import { InquiryMailService } from './inquiry-mail.service';
 
 const USER_UUID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const INQUIRY_UUID = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
@@ -55,6 +56,7 @@ describe('InquiryService', () => {
   let service: InquiryService;
   let inquiryRepo: jest.Mocked<Repository<Inquiry>>;
   let userRepo: jest.Mocked<Repository<User>>;
+  let inquiryMailService: { sendInquiryCreatedEmails: jest.Mock };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -74,12 +76,19 @@ describe('InquiryService', () => {
             findOneBy: jest.fn(),
           },
         },
+        {
+          provide: InquiryMailService,
+          useValue: {
+            sendInquiryCreatedEmails: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<InquiryService>(InquiryService);
     inquiryRepo = module.get(getRepositoryToken(Inquiry));
     userRepo = module.get(getRepositoryToken(User));
+    inquiryMailService = module.get(InquiryMailService);
   });
 
   afterEach(() => {
@@ -103,11 +112,18 @@ describe('InquiryService', () => {
 
       const result = await service.create(dto, USER_UUID);
 
-      expect(userRepo.findOneBy).toHaveBeenCalledWith({ id: USER_UUID });
-      expect(inquiryRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ ...dto, user }),
+      expect(userRepo.findOneBy.mock.calls).toEqual([[{ id: USER_UUID }]]);
+      expect(inquiryRepo.create.mock.calls[0][0]).toEqual(
+        expect.objectContaining({ ...dto, email: user.email, user }),
       );
-      expect(inquiryRepo.save).toHaveBeenCalledWith(inquiryEntity);
+      expect(inquiryRepo.save.mock.calls).toEqual([[inquiryEntity]]);
+      expect(inquiryMailService.sendInquiryCreatedEmails).toHaveBeenCalledWith({
+        inquiryId: inquiryEntity.id,
+        title: inquiryEntity.title,
+        content: inquiryEntity.content,
+        userEmail: inquiryEntity.email,
+        createdAt: inquiryEntity.createdAt,
+      });
       expect(result).toBeInstanceOf(InquiryResponseDto);
       expect(result.id).toBe(INQUIRY_UUID);
       expect(result.title).toBe('문의 제목');
@@ -123,8 +139,26 @@ describe('InquiryService', () => {
       await expect(service.create(dto, INVALID_UUID)).rejects.toThrow(
         '사용자를 찾을 수 없습니다',
       );
-      expect(inquiryRepo.create).not.toHaveBeenCalled();
-      expect(inquiryRepo.save).not.toHaveBeenCalled();
+      expect(inquiryRepo.create.mock.calls).toHaveLength(0);
+      expect(inquiryRepo.save.mock.calls).toHaveLength(0);
+      expect(
+        inquiryMailService.sendInquiryCreatedEmails,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('요청 body의 email과 무관하게 로그인 사용자 email을 저장한다', async () => {
+      const user = buildUser({ email: 'actual-user@example.com' });
+      const inquiryEntity = buildInquiry(user, { email: user.email });
+
+      userRepo.findOneBy.mockResolvedValue(user);
+      inquiryRepo.create.mockReturnValue(inquiryEntity);
+      inquiryRepo.save.mockResolvedValue(inquiryEntity);
+
+      await service.create({ ...dto, email: 'spoofed@example.com' }, USER_UUID);
+
+      expect(inquiryRepo.create.mock.calls[0][0]).toEqual(
+        expect.objectContaining({ email: 'actual-user@example.com' }),
+      );
     });
   });
 
@@ -143,10 +177,14 @@ describe('InquiryService', () => {
 
       const result = await service.findByUser(USER_UUID);
 
-      expect(inquiryRepo.find).toHaveBeenCalledWith({
-        where: { user: { id: USER_UUID } },
-        order: { createdAt: 'DESC' },
-      });
+      expect(inquiryRepo.find.mock.calls).toEqual([
+        [
+          {
+            where: { user: { id: USER_UUID } },
+            order: { createdAt: 'DESC' },
+          },
+        ],
+      ]);
       expect(result).toHaveLength(2);
       expect(result[0]).toBeInstanceOf(InquiryResponseDto);
       expect(result[0].id).toBe(INQUIRY_UUID);

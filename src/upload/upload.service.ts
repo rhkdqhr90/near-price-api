@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { promises as fs } from 'fs';
-import { extname } from 'path';
+import { extname, join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -34,7 +34,7 @@ export class UploadService {
     const configured = process.env.LOCAL_UPLOAD_DIR?.trim();
     return configured && configured.length > 0
       ? configured
-      : `${process.cwd()}/uploads`;
+      : join(process.cwd(), 'uploads');
   }
 
   private getUploadPublicBaseUrl(): string {

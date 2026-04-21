@@ -8,6 +8,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import * as express from 'express';
 import type { Request, Response, NextFunction } from 'express';
+import { tmpdir } from 'os';
 import { join } from 'path';
 
 async function bootstrap() {
@@ -71,16 +72,24 @@ async function bootstrap() {
 
   // 로컬 업로드 파일 정적 서빙 (개발 환경 전용)
   if (process.env.NODE_ENV !== 'production') {
-    const localUploadDir =
-      process.env.LOCAL_UPLOAD_DIR?.trim() || join(process.cwd(), 'uploads');
-    app.use(
-      '/uploads',
-      express.static(localUploadDir, {
-        dotfiles: 'deny',
-        index: false,
-        fallthrough: true,
-      }),
+    const uploadDirs = Array.from(
+      new Set([
+        process.env.LOCAL_UPLOAD_DIR?.trim() ||
+          join(tmpdir(), 'near-price-uploads'),
+        join(process.cwd(), 'uploads'),
+      ]),
     );
+
+    for (const dir of uploadDirs) {
+      app.use(
+        '/uploads',
+        express.static(dir, {
+          dotfiles: 'deny',
+          index: false,
+          fallthrough: true,
+        }),
+      );
+    }
   }
 
   // HTTPS 리다이렉트 미들웨어 (프로덕션 환경)

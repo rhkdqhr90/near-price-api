@@ -29,7 +29,10 @@ export class ProductSearchService {
     const products = await this.productRepository
       .createQueryBuilder('product')
       .where('product.name ILIKE :q ESCAPE :escape', { q, escape: '\\' })
-      .orWhere('product.category ILIKE :q ESCAPE :escape', { q, escape: '\\' })
+      .orWhere('CAST(product.category AS text) ILIKE :q ESCAPE :escape', {
+        q,
+        escape: '\\',
+      })
       .orderBy('product.name', 'ASC')
       .limit(limit)
       .getMany();
