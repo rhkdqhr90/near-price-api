@@ -302,15 +302,19 @@ SENTRY_DSN=https://...
 CORS_ORIGIN=http://localhost:5173
 ```
 
-### 프로덕션 배포 (EC2 + PM2)
+### 프로덕션 배포 (EC2 + SSM + Docker Compose)
 
 ```bash
-npm run build
-npm run typeorm:migration:run:prod
-pm2 start ecosystem.config.js
+git archive --format=tar.gz -o /tmp/near-price-api.tar.gz HEAD
+aws s3 cp /tmp/near-price-api.tar.gz s3://<DEPLOY_BUCKET>/deploy/near-price-api.tar.gz
+
+# SSM send-command로 EC2에서 아래 순서 실행
+# 1) /home/ec2-user/near-price-api 압축 해제
+# 2) docker compose -f deploy/docker-compose.yml --env-file .env up -d --build api nginx
+# 3) docker exec near-price-api npm run typeorm:migration:run:prod
 ```
 
-프로덕션 환경에서는 `.env` 파일 대신 EC2 시스템 환경변수를 PM2가 직접 읽습니다 (`ignoreEnvFile: true`).
+프로덕션 환경에서는 EC2의 `/home/ec2-user/near-price-api/.env`를 기준으로 컨테이너를 구동합니다.
 
 ---
 

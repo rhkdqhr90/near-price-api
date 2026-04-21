@@ -310,91 +310,53 @@ this.repository.find({
 
 ## 배포 절차
 
-### 방법 1: Docker Compose (권장)
+### 표준 경로: SSM + S3 + Docker Compose
 
-#### 1단계: 환경 설정
+운영 배포는 SSM 단일 경로를 사용합니다.
+
+#### 1단계: 배포 대상 확인
 
 ```bash
-cd near-price-api/deploy
-
-# 환경 변수 파일 생성
-cp .env.example .env.production
-# .env.production 파일 수정 (강력한 비밀번호 설정)
+cd infra/terraform
+terraform output ec2_deployment_info
+terraform output s3_deployment_info
 ```
 
-#### 2단계: SSL 인증서 준비
+#### 2단계: 아카이브 생성 + S3 업로드
 
 ```bash
-# Let's Encrypt 인증서 복사 또는 Cloudflare 인증서 설정
-mkdir -p certs
-cp /etc/letsencrypt/live/api.nearprice.com/fullchain.pem certs/
-cp /etc/letsencrypt/live/api.nearprice.com/privkey.pem certs/
-chmod 600 certs/privkey.pem
+cd /path/to/near-price-api
+COMMIT_SHA=$(git rev-parse --short HEAD)
+git archive --format=tar.gz -o "/tmp/near-price-api-${COMMIT_SHA}.tar.gz" HEAD
+
+aws s3 cp "/tmp/near-price-api-${COMMIT_SHA}.tar.gz" \
+  "s3://<DEPLOY_BUCKET>/deploy/near-price-api-${COMMIT_SHA}.tar.gz" \
+  --profile nearprice_admin --region ap-northeast-2
 ```
 
-#### 3단계: 배포
+#### 3단계: SSM 원격 배포 실행
 
 ```bash
-# 빌드 및 실행
-docker-compose -f docker-compose.yml up -d
-
-# 로그 확인
-docker-compose logs -f api-1
-
-# 헬스체크
-curl http://localhost:3000/health
-
-# 정상 작동 확인
-curl -H "Host: api.nearprice.com" https://localhost/api/products
+aws ssm send-command \
+  --profile nearprice_admin \
+  --region ap-northeast-2 \
+  --instance-ids "<EC2_INSTANCE_ID>" \
+  --document-name "AWS-RunShellScript" \
+  --parameters 'commands=[
+    "set -euo pipefail",
+    "aws s3 cp s3://<DEPLOY_BUCKET>/deploy/near-price-api-<COMMIT_SHA>.tar.gz /tmp/deploy.tar.gz",
+    "tar --no-same-owner -xzf /tmp/deploy.tar.gz -C /home/ec2-user/near-price-api",
+    "cd /home/ec2-user/near-price-api",
+    "docker compose -f deploy/docker-compose.yml --env-file .env up -d --build api nginx",
+    "docker exec near-price-api npm run typeorm:migration:run:prod"
+  ]'
 ```
 
-#### 4단계: 데이터베이스 마이그레이션
+#### 4단계: 헬스체크 및 핵심 엔드포인트 검증
 
 ```bash
-# 데이터베이스 초기화 (선택사항)
-docker exec near-price-api-1 npm run typeorm migration:run
-
-# 데이터베이스 상태 확인
-docker exec near-price-postgres psql -U gwang-kyo -d near_price -c "\dt"
-```
-
-### 방법 2: PM2 (Node.js 프로세스 관리)
-
-```bash
-# 설치
-npm install -g pm2
-
-# 시작
-pm2 start dist/main.js --name "near-price-api" \
-  --env NODE_ENV=production \
-  --instances 3 \
-  --exec-mode cluster
-
-# 로그 보기
-pm2 logs near-price-api
-
-# 모니터링
-pm2 monit
-
-# 자동 재시작 설정
-pm2 startup
-pm2 save
-```
-
-### 방법 3: 수동 배포
-
-```bash
-# 1. 빌드
-npm run build
-
-# 2. 의존성 설치 (프로덕션만)
-npm ci --only=production
-
-# 3. 마이그레이션 실행
-npm run typeorm migration:run
-
-# 4. 실행
-NODE_ENV=production node dist/main
+curl -f http://54.116.91.81/health
+curl -f "http://54.116.91.81/price/recent?page=1&limit=1"
 ```
 
 ---
@@ -517,7 +479,7 @@ sudo vi /etc/logrotate.d/near-price-api
 
 ```bash
 # 메모리 사용량 확인
-docker stats near-price-api-1
+docker stats near-price-api
 
 # Node.js 힙 크기 제한
 NODE_OPTIONS="--max-old-space-size=512" node dist/main
@@ -576,7 +538,7 @@ nginx -s reload
 
 배포 전 확인사항:
 
-- [ ] 환경 변수 설정 (.env.production)
+- [ ] EC2 환경 변수 파일 확인 (/home/ec2-user/near-price-api/.env)
 - [ ] JWT_SECRET 새로 생성 (`openssl rand -base64 32`)
 - [ ] 데이터베이스 비밀번호 강력하게 설정
 - [ ] Redis 비밀번호 설정
@@ -603,5 +565,5 @@ nginx -s reload
 
 ---
 
-**마지막 업데이트**: 2026-03-20
+**마지막 업데이트**: 2026-04-21
 **상태**: 프로덕션 준비 완료

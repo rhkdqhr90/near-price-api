@@ -281,14 +281,12 @@ docker-compose logs -f api
 curl http://localhost:3000/health
 ```
 
-또는 PM2로 배포:
+운영 배포는 PM2 대신 SSM + Docker Compose 경로를 사용:
 
 ```bash
-cd near-price-api
-npm install
-npm run build
-pm2 start dist/main.js --name near-price-api
-pm2 startup && pm2 save
+cd /home/ec2-user/near-price-api
+docker compose -f deploy/docker-compose.yml --env-file .env up -d --build api nginx
+docker exec near-price-api npm run typeorm:migration:run:prod
 ```
 
 ### STEP 7 — 데이터베이스 마이그레이션
