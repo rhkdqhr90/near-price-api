@@ -19,20 +19,37 @@ export class MovePriceUnitType1776900000000 implements MigrationInterface {
   name = 'MovePriceUnitType1776900000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // 1) prices.unitType enum + 컬럼 추가 (default 'other')
+    // 1) prices.unitType enum + 컬럼 추가 (default 'other').
+    //    synchronize: true로 이미 생성된 환경을 위해 idempotent하게 처리.
+    await queryRunner.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_type WHERE typname = 'prices_unittype_enum'
+        ) THEN
+          CREATE TYPE "public"."prices_unittype_enum"
+          AS ENUM('g', 'kg', 'ml', 'l', 'count', 'bunch', 'pack', 'bag', 'other');
+        END IF;
+      END $$;
+    `);
     await queryRunner.query(
-      `CREATE TYPE "public"."prices_unittype_enum" AS ENUM('g', 'kg', 'ml', 'l', 'count', 'bunch', 'pack', 'bag', 'other')`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "prices" ADD "unitType" "public"."prices_unittype_enum" NOT NULL DEFAULT 'other'`,
+      `ALTER TABLE "prices" ADD COLUMN IF NOT EXISTS "unitType" "public"."prices_unittype_enum" NOT NULL DEFAULT 'other'`,
     );
 
-    // 1-1) 기존 product의 unitType 값을 prices로 백필
-    await queryRunner.query(
-      `UPDATE "prices" p SET "unitType" = pr."unitType"::text::"public"."prices_unittype_enum"
-       FROM "products" pr
-       WHERE p."product_id" = pr."id" AND pr."unitType" IS NOT NULL`,
-    );
+    // 1-1) 기존 product의 unitType 값을 prices로 백필 (products에 unitType 컬럼이 아직 있을 때만)
+    const productUnitTypeExists: { exists: boolean }[] = await queryRunner.query(`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'products' AND column_name = 'unitType'
+      ) AS exists
+    `);
+    if (productUnitTypeExists[0]?.exists) {
+      await queryRunner.query(
+        `UPDATE "prices" p SET "unitType" = pr."unitType"::text::"public"."prices_unittype_enum"
+         FROM "products" pr
+         WHERE p."product_id" = pr."id" AND pr."unitType" IS NOT NULL`,
+      );
+    }
 
     // 2) 동일 (LOWER(name), category) products 병합
     //    대표(keeper) = 가장 오래된 createdAt
@@ -139,9 +156,13 @@ export class MovePriceUnitType1776900000000 implements MigrationInterface {
       WHERE p.id = r.id AND r.rn > 1
     `);
 
-    // 3) products.unitType 컬럼 + enum 제거
-    await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "unitType"`);
-    await queryRunner.query(`DROP TYPE "public"."products_unittype_enum"`);
+    // 3) products.unitType 컬럼 + enum 제거 (idempotent)
+    await queryRunner.query(
+      `ALTER TABLE "products" DROP COLUMN IF EXISTS "unitType"`,
+    );
+    await queryRunner.query(
+      `DROP TYPE IF EXISTS "public"."products_unittype_enum"`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
