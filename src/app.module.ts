@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { createThrottlerConfig } from './config/throttler.config';
 import { UserModule } from './user/user.module';
@@ -41,6 +41,7 @@ import { OwnerPost } from './flyer/entities/owner-post.entity';
 import { StoreReview } from './store/entities/store-review.entity';
 import { NaverModule } from './naver/naver.module';
 import { RedisModule } from './redis/redis.module';
+import { ProxyThrottlerGuard } from './common/guards/proxy-throttler.guard';
 
 @Module({
   imports: [
@@ -116,7 +117,7 @@ import { RedisModule } from './redis/redis.module';
   providers: [
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      useClass: ProxyThrottlerGuard,
     },
   ],
 })

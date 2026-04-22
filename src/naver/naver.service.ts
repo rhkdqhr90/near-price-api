@@ -181,11 +181,13 @@ export class NaverService {
     display = 10,
     sort = 'random',
   ): Promise<Record<string, unknown>> {
+    const normalizedQuery = this.normalizeSearchQuery(query);
+
     try {
       const res = await axios.get<Record<string, unknown>>(
         'https://openapi.naver.com/v1/search/local.json',
         {
-          params: { query, display, sort },
+          params: { query: normalizedQuery, display, sort },
           headers: {
             'X-Naver-Client-Id': this.searchClientId,
             'X-Naver-Client-Secret': this.searchClientSecret,
@@ -201,6 +203,20 @@ export class NaverService {
       );
       throw new BadGatewayException('네이버 로컬 검색 API 호출 실패');
     }
+  }
+
+  private normalizeSearchQuery(query: string): string {
+    const collapsed = query.replace(/\s+/g, ' ').trim();
+    if (!collapsed) {
+      return query;
+    }
+
+    const withoutPlaceholder = collapsed.replace(
+      /^(현재\s*위치|내\s*위치)\s+/,
+      '',
+    );
+
+    return withoutPlaceholder.trim() || collapsed;
   }
 
   async kakaoReverseGeocode(
