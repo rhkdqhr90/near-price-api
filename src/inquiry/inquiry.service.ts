@@ -1,11 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Inquiry } from './entities/inquiry.entity';
+import { Inquiry, InquiryStatus } from './entities/inquiry.entity';
 import { CreateInquiryDto } from './dto/create-inquiry.dto';
 import { InquiryResponseDto } from './dto/inquiry-response.dto';
 import { User } from '../user/entities/user.entity';
 import { InquiryMailService } from './inquiry-mail.service';
+import { ReplyInquiryDto } from './dto/reply-inquiry.dto';
 
 @Injectable()
 export class InquiryService {
@@ -51,5 +52,38 @@ export class InquiryService {
     });
 
     return inquiries.map((i) => InquiryResponseDto.from(i));
+  }
+
+  async findAll(): Promise<InquiryResponseDto[]> {
+    const inquiries = await this.inquiryRepository.find({
+      order: { createdAt: 'DESC' },
+    });
+
+    return inquiries.map((i) => InquiryResponseDto.from(i));
+  }
+
+  async reply(
+    inquiryId: string,
+    replyInquiryDto: ReplyInquiryDto,
+  ): Promise<InquiryResponseDto> {
+    const inquiry = await this.inquiryRepository.findOneBy({ id: inquiryId });
+    if (!inquiry) {
+      throw new NotFoundException('문의를 찾을 수 없습니다');
+    }
+
+    inquiry.adminReply = replyInquiryDto.adminReply.trim();
+    inquiry.status = InquiryStatus.ANSWERED;
+
+    const saved = await this.inquiryRepository.save(inquiry);
+
+    await this.inquiryMailService.sendInquiryAnsweredEmail({
+      inquiryId: saved.id,
+      title: saved.title,
+      adminReply: saved.adminReply ?? '',
+      userEmail: saved.email,
+      answeredAt: saved.updatedAt,
+    });
+
+    return InquiryResponseDto.from(saved);
   }
 }

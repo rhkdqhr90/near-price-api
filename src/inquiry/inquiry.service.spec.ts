@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { InquiryService } from './inquiry.service';
 import { Inquiry, InquiryStatus } from './entities/inquiry.entity';
 import { CreateInquiryDto } from './dto/create-inquiry.dto';
+import { ReplyInquiryDto } from './dto/reply-inquiry.dto';
 import { InquiryResponseDto } from './dto/inquiry-response.dto';
 import { User, UserRole } from '../user/entities/user.entity';
 import { InquiryMailService } from './inquiry-mail.service';
@@ -56,7 +57,10 @@ describe('InquiryService', () => {
   let service: InquiryService;
   let inquiryRepo: jest.Mocked<Repository<Inquiry>>;
   let userRepo: jest.Mocked<Repository<User>>;
-  let inquiryMailService: { sendInquiryCreatedEmails: jest.Mock };
+  let inquiryMailService: {
+    sendInquiryCreatedEmails: jest.Mock;
+    sendInquiryAnsweredEmail: jest.Mock;
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -68,6 +72,7 @@ describe('InquiryService', () => {
             create: jest.fn(),
             save: jest.fn(),
             find: jest.fn(),
+            findOneBy: jest.fn(),
           },
         },
         {
@@ -80,6 +85,7 @@ describe('InquiryService', () => {
           provide: InquiryMailService,
           useValue: {
             sendInquiryCreatedEmails: jest.fn(),
+            sendInquiryAnsweredEmail: jest.fn(),
           },
         },
       ],
@@ -196,6 +202,90 @@ describe('InquiryService', () => {
       const result = await service.findByUser(INVALID_UUID);
 
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('findAll()', () => {
+    it('전체 Inquiry 목록을 최신순으로 반환한다', async () => {
+      const user = buildUser();
+      const inquiries = [
+        buildInquiry(user, { id: INQUIRY_UUID }),
+        buildInquiry(user, {
+          id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+          title: '두 번째 문의',
+        }),
+      ];
+
+      inquiryRepo.find.mockResolvedValue(inquiries);
+
+      const result = await service.findAll();
+
+      expect(inquiryRepo.find.mock.calls).toEqual([
+        [
+          {
+            order: { createdAt: 'DESC' },
+          },
+        ],
+      ]);
+      expect(result).toHaveLength(2);
+      expect(result[0]).toBeInstanceOf(InquiryResponseDto);
+      expect(result[0].id).toBe(INQUIRY_UUID);
+    });
+  });
+
+  describe('reply()', () => {
+    const dto: ReplyInquiryDto = {
+      adminReply: '확인 후 조치했습니다.',
+    };
+
+    it('문의 답변을 저장하고 상태를 answered로 변경한다', async () => {
+      const user = buildUser();
+      const inquiry = buildInquiry(user);
+      const answeredInquiry = buildInquiry(user, {
+        status: InquiryStatus.ANSWERED,
+        adminReply: dto.adminReply,
+        updatedAt: new Date('2025-01-02T12:00:00.000Z'),
+      });
+
+      inquiryRepo.findOneBy.mockResolvedValue(inquiry);
+      inquiryRepo.save.mockResolvedValue(answeredInquiry);
+
+      const result = await service.reply(INQUIRY_UUID, dto);
+
+      expect(inquiryRepo.findOneBy.mock.calls).toEqual([
+        [{ id: INQUIRY_UUID }],
+      ]);
+      expect(inquiry.status).toBe(InquiryStatus.ANSWERED);
+      expect(inquiry.adminReply).toBe(dto.adminReply);
+      expect(inquiryRepo.save.mock.calls).toEqual([[inquiry]]);
+      expect(inquiryMailService.sendInquiryAnsweredEmail.mock.calls).toEqual([
+        [
+          {
+            inquiryId: answeredInquiry.id,
+            title: answeredInquiry.title,
+            adminReply: answeredInquiry.adminReply,
+            userEmail: answeredInquiry.email,
+            answeredAt: answeredInquiry.updatedAt,
+          },
+        ],
+      ]);
+      expect(result.status).toBe(InquiryStatus.ANSWERED);
+      expect(result.adminReply).toBe(dto.adminReply);
+    });
+
+    it('문의가 없으면 NotFoundException을 던진다', async () => {
+      inquiryRepo.findOneBy.mockResolvedValue(null);
+
+      await expect(service.reply(INVALID_UUID, dto)).rejects.toThrow(
+        NotFoundException,
+      );
+      await expect(service.reply(INVALID_UUID, dto)).rejects.toThrow(
+        '문의를 찾을 수 없습니다',
+      );
+      expect(inquiryRepo.save.mock.calls).toHaveLength(0);
+      expect(
+        inquiryMailService.sendInquiryAnsweredEmail.mock.calls,
+      ).toHaveLength(0);
     });
   });
 });

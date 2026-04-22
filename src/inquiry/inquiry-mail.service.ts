@@ -10,6 +10,14 @@ interface InquiryMailPayload {
   createdAt: Date;
 }
 
+interface InquiryAnswerMailPayload {
+  inquiryId: string;
+  title: string;
+  adminReply: string;
+  userEmail: string;
+  answeredAt: Date;
+}
+
 const FIXED_SUPPORT_EMAIL = 'rhkdqhr90@gmail.com';
 
 @Injectable()
@@ -111,6 +119,48 @@ export class InquiryMailService {
     } catch (error: unknown) {
       this.logger.error(
         `Failed to send inquiry receipt mail to user for ${payload.inquiryId}`,
+        (error as Error)?.message,
+      );
+    }
+  }
+
+  async sendInquiryAnsweredEmail(
+    payload: InquiryAnswerMailPayload,
+  ): Promise<void> {
+    if (!this.transporter || !this.fromEmail) {
+      return;
+    }
+
+    if (this.isPseudoKakaoFallbackEmail(payload.userEmail)) {
+      return;
+    }
+
+    const userSubject = '[NearPrice] 문의 답변이 등록되었습니다';
+    const userText = [
+      '안녕하세요. NearPrice입니다.',
+      '',
+      '문의에 대한 답변이 등록되었습니다.',
+      '',
+      `[문의 제목] ${payload.title}`,
+      `[문의 번호] ${payload.inquiryId}`,
+      `[답변 시각] ${payload.answeredAt.toISOString()}`,
+      '',
+      '[답변 내용]',
+      payload.adminReply,
+      '',
+      '본 메일은 발신전용입니다.',
+    ].join('\n');
+
+    try {
+      await this.transporter.sendMail({
+        from: this.fromEmail,
+        to: payload.userEmail,
+        subject: userSubject,
+        text: userText,
+      });
+    } catch (error: unknown) {
+      this.logger.error(
+        `Failed to send inquiry answer mail to user for ${payload.inquiryId}`,
         (error as Error)?.message,
       );
     }
