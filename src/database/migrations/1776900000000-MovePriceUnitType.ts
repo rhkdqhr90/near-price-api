@@ -37,7 +37,8 @@ export class MovePriceUnitType1776900000000 implements MigrationInterface {
     );
 
     // 1-1) 기존 product의 unitType 값을 prices로 백필 (products에 unitType 컬럼이 아직 있을 때만)
-    const productUnitTypeExists: { exists: boolean }[] = await queryRunner.query(`
+    const productUnitTypeExists: { exists: boolean }[] =
+      await queryRunner.query(`
       SELECT EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'products' AND column_name = 'unitType'

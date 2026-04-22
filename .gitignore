@@ -70,3 +70,13 @@ infra/terraform/*.tfplan
 
 # Terraform 문서 초안(로컬 가이드) 커밋 제외
 infra/terraform/*.md
+
+# 배포 자동 트리거/아티팩트는 로컬 전용으로 관리
+.github/workflows/deploy.yml
+near-price-api-*.tar.gz
+deploy/*.tar.gz
+
+# 배포용 환경파일(.env.example 제외) 커밋 금지
+deploy/.env
+deploy/.env.*
+!deploy/.env.example
