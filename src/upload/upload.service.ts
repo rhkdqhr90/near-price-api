@@ -8,6 +8,10 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { promises as fs } from 'fs';
 import { extname, join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import {
+  normalizeImageUrl,
+  resolveUploadPublicBaseUrl,
+} from '../common/utils/image-url.util';
 
 @Injectable()
 export class UploadService {
@@ -35,16 +39,6 @@ export class UploadService {
     return configured && configured.length > 0
       ? configured
       : join(process.cwd(), 'uploads');
-  }
-
-  private getUploadPublicBaseUrl(): string {
-    const configured = process.env.UPLOAD_PUBLIC_BASE_URL?.trim();
-    if (configured && configured.length > 0) {
-      return configured.replace(/\/+$/, '');
-    }
-
-    const port = process.env.PORT ?? '3000';
-    return `http://localhost:${port}`;
   }
 
   async upload(file: Express.Multer.File): Promise<{ url: string }> {
@@ -90,8 +84,9 @@ export class UploadService {
       throw new InternalServerErrorException('이미지 업로드에 실패했습니다.');
     }
 
+    const s3Url = `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
     return {
-      url: `https://${bucket}.s3.${region}.amazonaws.com/${key}`,
+      url: normalizeImageUrl(s3Url) ?? s3Url,
     };
   }
 
@@ -113,7 +108,9 @@ export class UploadService {
       throw new InternalServerErrorException('이미지 저장에 실패했습니다.');
     }
 
-    const publicBaseUrl = this.getUploadPublicBaseUrl();
+    const publicBaseUrl =
+      resolveUploadPublicBaseUrl() ??
+      `http://localhost:${process.env.PORT ?? '3000'}`;
     return {
       url: `${publicBaseUrl}/uploads/${fileName}`,
     };

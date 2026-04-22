@@ -3,6 +3,7 @@ import { StoreResponseDto } from '../../store/dto/store-response.dto';
 import { UserResponseDto } from '../../user/dto/user-response.dto';
 import { UnitType } from '../../product/entities/product.entity';
 import { Price } from '../entities/price.entity';
+import { normalizeImageUrl } from '../../common/utils/image-url.util';
 
 export class PriceResponseDto {
   id: string;
@@ -35,7 +36,7 @@ export class PriceResponseDto {
     dto.price = price.price;
     dto.quantity = price.quantity;
     dto.unitType = price.unitType;
-    dto.imageUrl = price.imageUrl;
+    dto.imageUrl = normalizeImageUrl(price.imageUrl) ?? price.imageUrl;
     dto.saleStartDate = price.saleStartDate;
     dto.saleEndDate = price.saleEndDate;
     dto.condition = price.condition;

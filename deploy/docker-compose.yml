@@ -67,6 +67,8 @@ services:
       # AWS S3 (이미지 업로드)
       AWS_REGION: ${AWS_REGION:-ap-northeast-2}
       S3_BUCKET_NAME: ${S3_BUCKET_NAME}
+      UPLOAD_PUBLIC_BASE_URL: ${UPLOAD_PUBLIC_BASE_URL:-}
+      CLOUDFRONT_DOMAIN: ${CLOUDFRONT_DOMAIN:-}
       # App
       CORS_ORIGIN: ${CORS_ORIGIN}
       API_HOST: ${API_HOST:-api.nearprice.kr}

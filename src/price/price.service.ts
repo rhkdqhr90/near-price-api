@@ -19,6 +19,7 @@ import { NotificationService } from '../notification/notification.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { ProductPriceCardDto } from './dto/product-price-card.dto';
+import { normalizeImageUrl } from '../common/utils/image-url.util';
 
 @Injectable()
 export class PriceService {
@@ -270,7 +271,7 @@ export class PriceService {
               longitude: p.store.longitude ?? null,
             }
           : null,
-        imageUrl: p.imageUrl ?? null,
+        imageUrl: normalizeImageUrl(p.imageUrl),
         quantity: p.quantity != null ? String(p.quantity) : null,
         hasClosingDiscount,
         verificationCount,

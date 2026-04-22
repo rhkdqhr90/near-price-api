@@ -3,6 +3,7 @@ import {
   UnitType,
 } from '../../product/entities/product.entity';
 import { Wishlist } from '../entities/wishlist.entity';
+import { normalizeImageUrl } from '../../common/utils/image-url.util';
 
 export class WishlistItemResponseDto {
   productId: string;
@@ -35,7 +36,7 @@ export class WishlistItemResponseDto {
       dto.unitType = lowest.unitType ?? null;
       dto.lowestPrice = lowest.price;
       dto.lowestPriceStoreName = lowest.store?.name ?? null;
-      dto.imageUrl = withImage?.imageUrl ?? null;
+      dto.imageUrl = normalizeImageUrl(withImage?.imageUrl ?? null);
       dto.verificationCount = lowest.verificationCount ?? 0;
     }
 
