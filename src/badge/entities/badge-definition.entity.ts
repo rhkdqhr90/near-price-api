@@ -4,6 +4,7 @@ export enum BadgeCategory {
   REGISTRATION = 'registration',
   VERIFICATION = 'verification',
   TRUST = 'trust',
+  POINT = 'point',
 }
 
 @Entity('badge_definitions')

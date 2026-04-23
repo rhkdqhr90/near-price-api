@@ -8,6 +8,7 @@ import { BadgeController } from './badge.controller';
 import { User } from '../user/entities/user.entity';
 import { UserTrustScore } from '../trust-score/entities/user-trust-score.entity';
 import { PriceVerification } from '../price-verification/entities/price-verification.entity';
+import { PointWallet } from '../point/entities/point-wallet.entity';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { PriceVerification } from '../price-verification/entities/price-verifica
       User,
       UserTrustScore,
       PriceVerification,
+      PointWallet,
     ]),
   ],
   controllers: [BadgeController],

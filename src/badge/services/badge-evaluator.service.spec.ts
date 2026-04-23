@@ -8,6 +8,7 @@ import {
 import { BadgeCategory } from '../entities/badge-definition.entity';
 import { User, UserRole } from '../../user/entities/user.entity';
 import { PriceVerification } from '../../price-verification/entities/price-verification.entity';
+import { PointWallet } from '../../point/entities/point-wallet.entity';
 
 function makeCountQb(count: number) {
   const qb: Record<string, jest.Mock> = {
@@ -29,6 +30,9 @@ describe('BadgeEvaluatorService', () => {
   >;
   let priceVerificationRepository: jest.Mocked<
     Pick<Repository<PriceVerification>, 'countBy'>
+  >;
+  let pointWalletRepository: jest.Mocked<
+    Pick<Repository<PointWallet>, 'findOne'>
   >;
 
   const mockUser: User = {
@@ -68,6 +72,12 @@ describe('BadgeEvaluatorService', () => {
             countBy: jest.fn(),
           },
         },
+        {
+          provide: getRepositoryToken(PointWallet),
+          useValue: {
+            findOne: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -76,6 +86,8 @@ describe('BadgeEvaluatorService', () => {
     priceVerificationRepository = module.get(
       getRepositoryToken(PriceVerification),
     );
+    pointWalletRepository = module.get(getRepositoryToken(PointWallet));
+    (pointWalletRepository.findOne as jest.Mock).mockResolvedValue(null);
   });
 
   // ── getUserBadges ────────────────────────────────────────────────────────
@@ -566,17 +578,18 @@ describe('BadgeEvaluatorService', () => {
   // ── getAllBadgeDefinitions ────────────────────────────────────────────────
 
   describe('getAllBadgeDefinitions', () => {
-    it('등록/검증/신뢰도 카테고리 모두 포함', () => {
+    it('등록/검증/포인트/신뢰도 카테고리 모두 포함', () => {
       const defs = service.getAllBadgeDefinitions();
       const categories = new Set(defs.map((d) => d.category));
       expect(categories.has(BadgeCategory.REGISTRATION)).toBe(true);
       expect(categories.has(BadgeCategory.VERIFICATION)).toBe(true);
+      expect(categories.has(BadgeCategory.POINT)).toBe(true);
       expect(categories.has(BadgeCategory.TRUST)).toBe(true);
     });
 
-    it('총 11개 뱃지 정의 반환 (등록 4 + 검증 4 + 신뢰도 3)', () => {
+    it('총 14개 뱃지 정의 반환 (등록 4 + 검증 4 + 포인트 3 + 신뢰도 3)', () => {
       const defs = service.getAllBadgeDefinitions();
-      expect(defs).toHaveLength(11);
+      expect(defs).toHaveLength(14);
     });
   });
 

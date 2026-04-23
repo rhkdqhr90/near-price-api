@@ -5,11 +5,13 @@ import { BadgeCategory } from '../entities/badge-definition.entity';
 import { User } from '../../user/entities/user.entity';
 import { PriceVerification } from '../../price-verification/entities/price-verification.entity';
 import { UserBadgesResponseDto } from '../dto/user-badges-response.dto';
+import { PointWallet } from '../../point/entities/point-wallet.entity';
 
 export interface BadgeEvaluationContext {
   totalRegistrations: number;
   totalVerifications: number;
   trustScore: number;
+  totalPoints?: number;
   trustScoreMaintainedDays?: number;
 }
 
@@ -20,6 +22,8 @@ export class BadgeEvaluatorService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(PriceVerification)
     private readonly priceVerificationRepository: Repository<PriceVerification>,
+    @InjectRepository(PointWallet)
+    private readonly pointWalletRepository: Repository<PointWallet>,
   ) {}
 
   /**
@@ -33,18 +37,22 @@ export class BadgeEvaluatorService {
       return { earned: [], progress: [] };
     }
 
-    const [totalRegistrations, totalVerifications] = await Promise.all([
-      this.userRepository
-        .createQueryBuilder('u')
-        .leftJoin('u.prices', 'p')
-        .select('COUNT(p.id)', 'cnt')
-        .where('u.id = :userId', { userId })
-        .getRawOne<{ cnt: string }>()
-        .then((r) => parseInt(r?.cnt ?? '0', 10)),
-      this.priceVerificationRepository.countBy({
-        verifier: { id: userId },
-      }),
-    ]);
+    const [totalRegistrations, totalVerifications, totalPoints] =
+      await Promise.all([
+        this.userRepository
+          .createQueryBuilder('u')
+          .leftJoin('u.prices', 'p')
+          .select('COUNT(p.id)', 'cnt')
+          .where('u.id = :userId', { userId })
+          .getRawOne<{ cnt: string }>()
+          .then((r) => parseInt(r?.cnt ?? '0', 10)),
+        this.priceVerificationRepository.countBy({
+          verifier: { id: userId },
+        }),
+        this.pointWalletRepository
+          .findOne({ where: { user: { id: userId } } })
+          .then((wallet) => wallet?.lifetimeEarned ?? 0),
+      ]);
 
     const trustScoreMaintainedDays = Math.floor(
       (Date.now() - (user.createdAt?.getTime() ?? Date.now())) /
@@ -55,6 +63,7 @@ export class BadgeEvaluatorService {
       totalRegistrations,
       totalVerifications,
       trustScore: user.trustScore ?? 0,
+      totalPoints,
       trustScoreMaintainedDays,
     };
 
@@ -169,6 +178,34 @@ export class BadgeEvaluatorService {
       threshold: 500,
       rank: 4,
     },
+    // 포인트 기반 뱃지
+    {
+      id: 'point_100',
+      category: BadgeCategory.POINT,
+      name: '포인트 새싹',
+      description: '누적 포인트 100점 달성',
+      icon: '🌱',
+      threshold: 100,
+      rank: 1,
+    },
+    {
+      id: 'point_500',
+      category: BadgeCategory.POINT,
+      name: '포인트 수집가',
+      description: '누적 포인트 500점 달성',
+      icon: '💰',
+      threshold: 500,
+      rank: 2,
+    },
+    {
+      id: 'point_2000',
+      category: BadgeCategory.POINT,
+      name: '포인트 전설',
+      description: '누적 포인트 2000점 달성',
+      icon: '🔥',
+      threshold: 2000,
+      rank: 3,
+    },
     // 신뢰도 기반 뱃지
     {
       id: 'trust_70_30',
@@ -226,6 +263,17 @@ export class BadgeEvaluatorService {
 
     for (const badge of verificationBadges) {
       if (context.totalVerifications >= badge.threshold) {
+        earnedBadges.push(badge.id);
+      }
+    }
+
+    // 포인트 기반 뱃지
+    const pointBadges = this.badgeDefinitions
+      .filter((b) => b.category === BadgeCategory.POINT)
+      .sort((a, b) => a.threshold - b.threshold);
+
+    for (const badge of pointBadges) {
+      if ((context.totalPoints ?? 0) >= badge.threshold) {
         earnedBadges.push(badge.id);
       }
     }
@@ -293,6 +341,27 @@ export class BadgeEvaluatorService {
         threshold: nextVerificationBadge.threshold,
         progressPercent: Math.round(
           (context.totalVerifications / nextVerificationBadge.threshold) * 100,
+        ),
+      });
+    }
+
+    // 포인트 기반 진행 중인 뱃지
+    const totalPoints = context.totalPoints ?? 0;
+    const nextPointBadge =
+      totalPoints > 0
+        ? this.badgeDefinitions
+            .filter((b) => b.category === BadgeCategory.POINT)
+            .sort((a, b) => a.threshold - b.threshold)
+            .find((b) => totalPoints < b.threshold)
+        : undefined;
+
+    if (nextPointBadge) {
+      progressBadges.push({
+        badgeId: nextPointBadge.id,
+        current: totalPoints,
+        threshold: nextPointBadge.threshold,
+        progressPercent: Math.round(
+          (totalPoints / nextPointBadge.threshold) * 100,
         ),
       });
     }
