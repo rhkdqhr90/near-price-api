@@ -42,6 +42,9 @@ import { StoreReview } from './store/entities/store-review.entity';
 import { NaverModule } from './naver/naver.module';
 import { RedisModule } from './redis/redis.module';
 import { ProxyThrottlerGuard } from './common/guards/proxy-throttler.guard';
+import { PointModule } from './point/point.module';
+import { PointWallet } from './point/entities/point-wallet.entity';
+import { PointTransaction } from './point/entities/point-transaction.entity';
 
 @Module({
   imports: [
@@ -89,6 +92,8 @@ import { ProxyThrottlerGuard } from './common/guards/proxy-throttler.guard';
           Flyer,
           OwnerPost,
           StoreReview,
+          PointWallet,
+          PointTransaction,
         ],
         synchronize: false,
       }),
@@ -113,6 +118,7 @@ import { ProxyThrottlerGuard } from './common/guards/proxy-throttler.guard';
     FlyerModule,
     NaverModule,
     RedisModule,
+    PointModule,
   ],
   providers: [
     {

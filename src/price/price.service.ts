@@ -20,6 +20,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { ProductPriceCardDto } from './dto/product-price-card.dto';
 import { normalizeImageUrl } from '../common/utils/image-url.util';
+import { PointService } from '../point/point.service';
 
 @Injectable()
 export class PriceService {
@@ -43,6 +44,7 @@ export class PriceService {
 
     private readonly priceReactionService: PriceReactionService,
     private readonly notificationService: NotificationService,
+    private readonly pointService: PointService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -87,6 +89,12 @@ export class PriceService {
     ).catch((err: unknown) =>
       this.logger.warn('찜 알림 전송 실패', (err as Error)?.message),
     );
+
+    this.pointService
+      .rewardPriceCreate(user.id, saved.id, store.latitude, store.longitude)
+      .catch((err: unknown) =>
+        this.logger.warn('등록 포인트 적립 실패', (err as Error)?.message),
+      );
 
     return PriceResponseDto.from(saved);
   }
@@ -460,7 +468,7 @@ export class PriceService {
   async remove(id: string, userId: string): Promise<void> {
     const price = await this.priceRepository.findOne({
       where: { id },
-      relations: ['user'],
+      relations: ['user', 'store'],
     });
     if (!price) {
       throw new NotFoundException('가격 정보가 없습니다');
@@ -469,5 +477,16 @@ export class PriceService {
       throw new ForbiddenException('삭제 권한이 없습니다.');
     }
     await this.priceRepository.remove(price);
+
+    this.pointService
+      .deductPriceDelete(
+        userId,
+        price.id,
+        price.store.latitude,
+        price.store.longitude,
+      )
+      .catch((err: unknown) =>
+        this.logger.warn('삭제 포인트 차감 실패', (err as Error)?.message),
+      );
   }
 }

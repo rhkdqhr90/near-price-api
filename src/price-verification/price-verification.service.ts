@@ -21,6 +21,7 @@ import { Price } from '../price/entities/price.entity';
 import { User } from '../user/entities/user.entity';
 import { PriceTrustScoreCalculator } from '../trust-score/services/price-trust-score.calculator';
 import { NotificationService } from '../notification/notification.service';
+import { PointService } from '../point/point.service';
 
 const VERIFICATION_BADGE_THRESHOLDS: Record<number, string> = {
   10: '가격 확인러',
@@ -43,6 +44,7 @@ export class PriceVerificationService {
     private trustScoreCalculator: PriceTrustScoreCalculator,
     private dataSource: DataSource,
     private notificationService: NotificationService,
+    private pointService: PointService,
   ) {}
 
   /**
@@ -187,6 +189,26 @@ export class PriceVerificationService {
       this.checkAndNotifyBadge(userId).catch((err: unknown) =>
         this.logger.warn('뱃지 알림 전송 실패', (err as Error)?.message),
       );
+
+      if (
+        createVerificationDto.result === VerificationResult.DISPUTED &&
+        price.user?.id
+      ) {
+        this.pointService
+          .deductPriceDisputed(
+            price.user.id,
+            price.id,
+            savedVerification.id,
+            price.store.latitude,
+            price.store.longitude,
+          )
+          .catch((err: unknown) =>
+            this.logger.warn(
+              '달라요 포인트 차감 실패',
+              (err as Error)?.message,
+            ),
+          );
+      }
 
       return result;
     } catch (error) {
