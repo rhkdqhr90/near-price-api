@@ -80,3 +80,4 @@ deploy/*.tar.gz
 deploy/.env
 deploy/.env.*
 !deploy/.env.example
+deploy/.md
