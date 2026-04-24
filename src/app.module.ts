@@ -45,6 +45,9 @@ import { ProxyThrottlerGuard } from './common/guards/proxy-throttler.guard';
 import { PointModule } from './point/point.module';
 import { PointWallet } from './point/entities/point-wallet.entity';
 import { PointTransaction } from './point/entities/point-transaction.entity';
+import { OwnerApplicationModule } from './owner-application/owner-application.module';
+import { OwnerApplication } from './owner-application/entities/owner-application.entity';
+import { Notification } from './notification/entities/notification.entity';
 
 @Module({
   imports: [
@@ -94,6 +97,8 @@ import { PointTransaction } from './point/entities/point-transaction.entity';
           StoreReview,
           PointWallet,
           PointTransaction,
+          OwnerApplication,
+          Notification,
         ],
         synchronize: false,
       }),
@@ -119,6 +124,7 @@ import { PointTransaction } from './point/entities/point-transaction.entity';
     NaverModule,
     RedisModule,
     PointModule,
+    OwnerApplicationModule,
   ],
   providers: [
     {

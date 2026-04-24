@@ -24,6 +24,7 @@ export class FlyerResponseDto {
   products: FlyerProductItem[] | null;
   reviews: FlyerReviewItem[] | null;
   isActive: boolean;
+  ownerApplicationId: string | null;
   createdAt: Date;
   updatedAt: Date;
 
@@ -48,6 +49,7 @@ export class FlyerResponseDto {
     dto.products = flyer.products ?? null;
     dto.reviews = flyer.reviews ?? null;
     dto.isActive = flyer.isActive;
+    dto.ownerApplicationId = flyer.ownerApplication?.id ?? null;
     dto.createdAt = flyer.createdAt;
     dto.updatedAt = flyer.updatedAt;
     return dto;

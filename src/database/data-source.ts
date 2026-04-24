@@ -18,6 +18,10 @@ import { Inquiry } from '../inquiry/entities/inquiry.entity';
 import { Flyer } from '../flyer/entities/flyer.entity';
 import { OwnerPost } from '../flyer/entities/owner-post.entity';
 import { Notification } from '../notification/entities/notification.entity';
+import { OwnerApplication } from '../owner-application/entities/owner-application.entity';
+import { StoreReview } from '../store/entities/store-review.entity';
+import { PointWallet } from '../point/entities/point-wallet.entity';
+import { PointTransaction } from '../point/entities/point-transaction.entity';
 
 config();
 
@@ -56,6 +60,10 @@ export const AppDataSource = new DataSource({
     Flyer,
     OwnerPost,
     Notification,
+    OwnerApplication,
+    StoreReview,
+    PointWallet,
+    PointTransaction,
   ],
   migrations: [__dirname + '/migrations/*.{ts,js}'],
   synchronize: false,

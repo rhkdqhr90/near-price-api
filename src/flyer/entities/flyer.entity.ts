@@ -2,9 +2,12 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  JoinColumn,
+  ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { OwnerApplication } from '../../owner-application/entities/owner-application.entity';
 
 export interface FlyerProductItem {
   id: string;
@@ -94,6 +97,10 @@ export class Flyer {
 
   @Column({ default: true })
   isActive: boolean;
+
+  @ManyToOne(() => OwnerApplication, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'owner_application_id' })
+  ownerApplication: OwnerApplication | null;
 
   @CreateDateColumn()
   createdAt: Date;

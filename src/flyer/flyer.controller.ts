@@ -13,6 +13,8 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthUser } from '../auth/types/auth-user.type';
 import { FlyerService } from './flyer.service';
 import { CreateFlyerDto } from './dto/create-flyer.dto';
 import { UpdateFlyerDto } from './dto/update-flyer.dto';
@@ -38,6 +40,14 @@ export class FlyerController {
     return await this.flyerService.findAllOwnerPosts();
   }
 
+  @Get('my')
+  @UseGuards(JwtAuthGuard)
+  async findMyFlyers(
+    @CurrentUser() requestUser: AuthUser,
+  ): Promise<FlyerResponseDto[]> {
+    return await this.flyerService.findMyFlyers(requestUser.userId);
+  }
+
   @Get(':id')
   async findOne(
     @Param('id', ParseUUIDPipe) id: string,
@@ -51,6 +61,15 @@ export class FlyerController {
     return await this.flyerService.createFlyer(dto);
   }
 
+  @Post('my')
+  @UseGuards(JwtAuthGuard)
+  async createMyFlyer(
+    @CurrentUser() requestUser: AuthUser,
+    @Body() dto: CreateFlyerDto,
+  ): Promise<FlyerResponseDto> {
+    return await this.flyerService.createMyFlyer(requestUser.userId, dto);
+  }
+
   @Patch(':id')
   @UseGuards(JwtAuthGuard, AdminGuard)
   async update(
@@ -60,11 +79,31 @@ export class FlyerController {
     return await this.flyerService.updateFlyer(id, dto);
   }
 
+  @Patch('my/:id')
+  @UseGuards(JwtAuthGuard)
+  async updateMyFlyer(
+    @CurrentUser() requestUser: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateFlyerDto,
+  ): Promise<FlyerResponseDto> {
+    return await this.flyerService.updateMyFlyer(requestUser.userId, id, dto);
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(JwtAuthGuard, AdminGuard)
   async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.flyerService.removeFlyer(id);
+  }
+
+  @Delete('my/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard)
+  async removeMyFlyer(
+    @CurrentUser() requestUser: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    await this.flyerService.removeMyFlyer(requestUser.userId, id);
   }
 
   // ─── Owner Posts ──────────────────────────────────────────────────────────
