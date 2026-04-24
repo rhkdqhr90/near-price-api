@@ -81,3 +81,4 @@ deploy/.env
 deploy/.env.*
 !deploy/.env.example
 deploy/.md
+deploy/DEPLOY_COMMANDS_2026-04-22.md
