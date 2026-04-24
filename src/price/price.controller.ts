@@ -23,6 +23,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { SearchPriceByNameDto } from './dto/search-price-by-name.dto';
 import { Throttle } from '@nestjs/throttler';
+import { RecentPriceQueryDto } from './dto/recent-price-query.dto';
 
 @Controller('price')
 export class PriceController {
@@ -50,9 +51,9 @@ export class PriceController {
   // public endpoint — 비로그인 사용자도 가격 조회 가능 (앱 핵심 기능)
   @Get('recent')
   async findRecent(
-    @Query() pagination: PaginationDto,
+    @Query() query: RecentPriceQueryDto,
   ): Promise<PaginatedResponseDto<ProductPriceCardDto>> {
-    return await this.priceService.findRecentByProduct(pagination);
+    return await this.priceService.findRecentByProduct(query);
   }
 
   // public endpoint — 비로그인 사용자도 가격 조회 가능

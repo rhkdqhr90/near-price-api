@@ -21,6 +21,7 @@ import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { ProductPriceCardDto } from './dto/product-price-card.dto';
 import { normalizeImageUrl } from '../common/utils/image-url.util';
 import { PointService } from '../point/point.service';
+import { RecentPriceQueryDto } from './dto/recent-price-query.dto';
 
 @Injectable()
 export class PriceService {
@@ -166,27 +167,58 @@ export class PriceService {
   }
 
   async findRecentByProduct(
-    pagination: PaginationDto,
+    query: RecentPriceQueryDto,
   ): Promise<PaginatedResponseDto<ProductPriceCardDto>> {
-    const { page, limit } = pagination;
+    const { page, limit } = query;
+    const hasLocationFilter = this.hasLocationFilter(query);
+    const distanceExpr = this.getDistanceSql('s');
 
     // 1. 고유 상품 수
-    const countRow = await this.priceRepository
+    const countQuery = this.priceRepository
       .createQueryBuilder('p')
       .select('COUNT(DISTINCT p.product_id)', 'cnt')
-      .where('p.isActive = true')
-      .getRawOne<{ cnt: string }>();
+      .where('p.isActive = true');
+
+    if (hasLocationFilter) {
+      countQuery
+        .innerJoin('p.store', 's')
+        .andWhere('s.latitude IS NOT NULL')
+        .andWhere('s.longitude IS NOT NULL')
+        .andWhere(`${distanceExpr} <= :radiusM`, {
+          latitude: query.latitude,
+          longitude: query.longitude,
+          radiusM: query.radiusM,
+        });
+    }
+
+    const countRow = await countQuery.getRawOne<{ cnt: string }>();
     const total = parseInt(countRow?.cnt ?? '0', 10);
 
     // 2. 상품별 최저가 row ID (DISTINCT ON)
-    const cheapestRows = await this.dataSource.query<{ id: string }[]>(
-      `SELECT DISTINCT ON (product_id) id
-       FROM prices
-       WHERE "isActive" = true
-       ORDER BY product_id, price ASC, "createdAt" DESC
-       LIMIT $1 OFFSET $2`,
-      [limit, (page - 1) * limit],
-    );
+    const cheapestRowsQuery = this.priceRepository
+      .createQueryBuilder('p')
+      .select('p.id', 'id')
+      .distinctOn(['p.product_id'])
+      .where('p.isActive = true')
+      .orderBy('p.product_id', 'ASC')
+      .addOrderBy('p.price', 'ASC')
+      .addOrderBy('p.createdAt', 'DESC')
+      .take(limit)
+      .skip((page - 1) * limit);
+
+    if (hasLocationFilter) {
+      cheapestRowsQuery
+        .innerJoin('p.store', 's')
+        .andWhere('s.latitude IS NOT NULL')
+        .andWhere('s.longitude IS NOT NULL')
+        .andWhere(`${distanceExpr} <= :radiusM`, {
+          latitude: query.latitude,
+          longitude: query.longitude,
+          radiusM: query.radiusM,
+        });
+    }
+
+    const cheapestRows = await cheapestRowsQuery.getRawMany<{ id: string }>();
 
     if (cheapestRows.length === 0) {
       return PaginatedResponseDto.of([], total, page, limit);
@@ -201,7 +233,7 @@ export class PriceService {
 
     // 4. 상품별 집계 (maxPrice, avgPrice, storeCount)
     const productIds = cheapestPrices.map((p) => p.product.id);
-    const aggregates = await this.priceRepository
+    const aggregateQuery = this.priceRepository
       .createQueryBuilder('p')
       .select('p.product_id', 'productId')
       .addSelect('MAX(p.price)', 'maxPrice')
@@ -209,29 +241,57 @@ export class PriceService {
       .addSelect('COUNT(DISTINCT p.store_id)', 'storeCount')
       .where('p.product_id IN (:...productIds)', { productIds })
       .andWhere('p.isActive = true')
-      .groupBy('p.product_id')
-      .getRawMany<{
-        productId: string;
-        maxPrice: string;
-        avgPrice: string;
-        storeCount: string;
-      }>();
+      .groupBy('p.product_id');
+
+    if (hasLocationFilter) {
+      aggregateQuery
+        .innerJoin('p.store', 's')
+        .andWhere('s.latitude IS NOT NULL')
+        .andWhere('s.longitude IS NOT NULL')
+        .andWhere(`${distanceExpr} <= :radiusM`, {
+          latitude: query.latitude,
+          longitude: query.longitude,
+          radiusM: query.radiusM,
+        });
+    }
+
+    const aggregates = await aggregateQuery.getRawMany<{
+      productId: string;
+      maxPrice: string;
+      avgPrice: string;
+      storeCount: string;
+    }>();
 
     const aggMap = new Map(aggregates.map((a) => [a.productId, a]));
 
     // 4-1. 상품별 최근 7일 최저가 (isLowest7d 판정용)
-    const lowest7dRows = await this.dataSource.query<
-      { product_id: string; min7d: string }[]
-    >(
-      `SELECT product_id, MIN(price)::text as min7d
-       FROM prices
-       WHERE product_id = ANY($1)
-         AND "createdAt" >= NOW() - INTERVAL '7 days'
-       GROUP BY product_id`,
-      [productIds],
-    );
+    const lowest7dQuery = this.priceRepository
+      .createQueryBuilder('p')
+      .select('p.product_id', 'productId')
+      .addSelect('MIN(p.price)', 'min7d')
+      .where('p.product_id IN (:...productIds)', { productIds })
+      .andWhere('p.isActive = true')
+      .andWhere(`p."createdAt" >= NOW() - INTERVAL '7 days'`)
+      .groupBy('p.product_id');
+
+    if (hasLocationFilter) {
+      lowest7dQuery
+        .innerJoin('p.store', 's')
+        .andWhere('s.latitude IS NOT NULL')
+        .andWhere('s.longitude IS NOT NULL')
+        .andWhere(`${distanceExpr} <= :radiusM`, {
+          latitude: query.latitude,
+          longitude: query.longitude,
+          radiusM: query.radiusM,
+        });
+    }
+
+    const lowest7dRows = await lowest7dQuery.getRawMany<{
+      productId: string;
+      min7d: string;
+    }>();
     const lowest7dMap = new Map(
-      lowest7dRows.map((r) => [r.product_id, parseFloat(r.min7d)]),
+      lowest7dRows.map((r) => [r.productId, parseFloat(r.min7d)]),
     );
 
     // 5. 가격별 맞아요(CONFIRM) 반응 수 집계
@@ -488,5 +548,29 @@ export class PriceService {
       .catch((err: unknown) =>
         this.logger.warn('삭제 포인트 차감 실패', (err as Error)?.message),
       );
+  }
+
+  private hasLocationFilter(
+    query: RecentPriceQueryDto,
+  ): query is RecentPriceQueryDto & {
+    latitude: number;
+    longitude: number;
+    radiusM: number;
+  } {
+    return (
+      query.latitude != null &&
+      query.longitude != null &&
+      query.radiusM != null &&
+      Number.isFinite(query.latitude) &&
+      Number.isFinite(query.longitude) &&
+      Number.isFinite(query.radiusM)
+    );
+  }
+
+  private getDistanceSql(storeAlias: string): string {
+    return `6371000 * ACOS(LEAST(1, GREATEST(-1,
+      COS(RADIANS(:latitude)) * COS(RADIANS(${storeAlias}.latitude)) * COS(RADIANS(${storeAlias}.longitude) - RADIANS(:longitude))
+      + SIN(RADIANS(:latitude)) * SIN(RADIANS(${storeAlias}.latitude))
+    )))`;
   }
 }
