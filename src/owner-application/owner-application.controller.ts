@@ -12,6 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { SkipThrottle } from '@nestjs/throttler';
 import type { AuthUser } from '../auth/types/auth-user.type';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -80,12 +81,26 @@ export class OwnerApplicationController {
 
   @Get('admin')
   @UseGuards(JwtAuthGuard, AdminGuard)
+  @SkipThrottle({
+    default: true,
+    auth: true,
+    read: true,
+    write: true,
+    search: true,
+  })
   async findAllForAdmin(): Promise<OwnerApplicationAdminListItemDto[]> {
     return await this.ownerApplicationService.findAllForAdmin();
   }
 
   @Get('admin/:id')
   @UseGuards(JwtAuthGuard, AdminGuard)
+  @SkipThrottle({
+    default: true,
+    auth: true,
+    read: true,
+    write: true,
+    search: true,
+  })
   async findOneForAdmin(
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<OwnerApplicationAdminDetailDto> {
@@ -94,7 +109,13 @@ export class OwnerApplicationController {
 
   @Patch('admin/:id/approve')
   @UseGuards(JwtAuthGuard, AdminGuard)
-  @Throttle({ write: { limit: 20, ttl: 60000 } })
+  @SkipThrottle({
+    default: true,
+    auth: true,
+    read: true,
+    write: true,
+    search: true,
+  })
   async approve(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() requestUser: AuthUser,
@@ -104,7 +125,13 @@ export class OwnerApplicationController {
 
   @Patch('admin/:id/reject')
   @UseGuards(JwtAuthGuard, AdminGuard)
-  @Throttle({ write: { limit: 20, ttl: 60000 } })
+  @SkipThrottle({
+    default: true,
+    auth: true,
+    read: true,
+    write: true,
+    search: true,
+  })
   async reject(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() requestUser: AuthUser,

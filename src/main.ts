@@ -87,6 +87,9 @@ async function bootstrap() {
           dotfiles: 'deny',
           index: false,
           fallthrough: true,
+          setHeaders: (res) => {
+            res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+          },
         }),
       );
     }
