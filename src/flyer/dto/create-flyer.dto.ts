@@ -14,25 +14,25 @@ import { Type } from 'class-transformer';
 export class FlyerProductBadgeDto {
   @IsString()
   @IsNotEmpty()
-  label: string;
+  label!: string;
 
   @IsString()
   @IsNotEmpty()
-  type: 'red' | 'yellow' | 'blue';
+  type!: 'red' | 'yellow' | 'blue';
 }
 
 export class FlyerProductItemDto {
   @IsString()
   @IsNotEmpty()
-  id: string;
+  id!: string;
 
   @IsString()
   @IsNotEmpty()
-  name: string;
+  name!: string;
 
   @IsString()
   @IsNotEmpty()
-  emoji: string;
+  emoji!: string;
 
   @IsString()
   @IsOptional()
@@ -44,35 +44,35 @@ export class FlyerProductItemDto {
   originalPrice?: number | null;
 
   @IsNumber()
-  salePrice: number;
+  salePrice!: number;
 
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => FlyerProductBadgeDto)
-  badges: FlyerProductBadgeDto[];
+  badges!: FlyerProductBadgeDto[];
 }
 
 export class FlyerReviewItemDto {
   @IsString()
   @IsNotEmpty()
-  id: string;
+  id!: string;
 
   @IsString()
   @IsNotEmpty()
-  name: string;
+  name!: string;
 
   @IsString()
   @IsNotEmpty()
-  initial: string;
+  initial!: string;
 
   @IsString()
   @IsNotEmpty()
-  meta: string;
+  meta!: string;
 
   @IsString()
   @IsNotEmpty()
   @MaxLength(500)
-  content: string;
+  content!: string;
 
   @IsNumber()
   @IsOptional()
@@ -80,39 +80,39 @@ export class FlyerReviewItemDto {
 
   @IsString()
   @IsNotEmpty()
-  avatarColor: string;
+  avatarColor!: string;
 }
 
 export class CreateFlyerDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
-  storeName: string;
+  storeName!: string;
 
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
-  promotionTitle: string;
+  promotionTitle!: string;
 
   @IsString()
   @IsNotEmpty()
   @MaxLength(30)
-  badge: string;
+  badge!: string;
 
   @IsString()
   @IsNotEmpty()
   @MaxLength(30)
-  badgeColor: string;
+  badgeColor!: string;
 
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
-  dateRange: string;
+  dateRange!: string;
 
   @IsString()
   @IsNotEmpty()
   @MaxLength(200)
-  highlight: string;
+  highlight!: string;
 
   @IsString()
   @IsOptional()

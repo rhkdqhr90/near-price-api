@@ -12,10 +12,10 @@ import { Type } from 'class-transformer';
 
 export class Create<n>Dto {
   @IsUUID()
-  storeId: string;
+  storeId!: string;
 
   @IsNumber()
-  price: number;
+  price!: number;
 
   // 날짜는 반드시 @Type(() => Date) + @IsDate()
   @IsOptional()
@@ -53,10 +53,10 @@ Entity를 직접 반환하지 않는다. 항상 ResponseDto를 통해 반환.
 
 ```typescript
 export class <n>ResponseDto {
-  id: string;
-  price: number;
-  storeName: string;
-  createdAt: Date;
+  id!: string;
+  price!: number;
+  storeName!: string;
+  createdAt!: Date;
 
   static from(entity: <n>): <n>ResponseDto {
     const dto = new <n>ResponseDto();
@@ -69,6 +69,22 @@ export class <n>ResponseDto {
 }
 ```
 
+## strictPropertyInitialization (TS2564) 대응
+
+NestJS DTO는 런타임에 class-transformer가 값을 주입하므로, 필수 필드는 `!`를 사용한다.
+
+```typescript
+@IsString()
+name!: string;
+
+@IsNumber()
+price!: number;
+
+@IsOptional()
+@IsString()
+description?: string;
+```
+
 ## 검증 데코레이터 전체 목록
 
 ```typescript
@@ -77,31 +93,31 @@ import { IsString, IsNumber, IsEmail, IsUUID, IsDate, IsInt,
          MinLength, MaxLength, Min, Max, Matches } from 'class-validator';
 
 // 문자열
-@IsString() name: string;
-@Email() email: string;
-@Length(2, 50) username: string;
-@MaxLength(500) description: string;
+@IsString() name!: string;
+@Email() email!: string;
+@Length(2, 50) username!: string;
+@MaxLength(500) description!: string;
 
 // 숫자
-@IsNumber() latitude: number;
-@IsInt() quantity: number;
-@IsPositive() price: number; // > 0
+@IsNumber() latitude!: number;
+@IsInt() quantity!: number;
+@IsPositive() price!: number; // > 0
 
 // UUID
-@IsUUID() storeId: string;
+@IsUUID() storeId!: string;
 
 // 날짜
 @Type(() => Date)
-@IsDate() saleEndDate: Date;
+@IsDate() saleEndDate!: Date;
 
 // Enum
-@IsEnum(VerificationResult) result: VerificationResult;
+@IsEnum(VerificationResult) result!: VerificationResult;
 
 // 선택 필드
 @IsOptional() comment?: string;
 
 // 배열
-@IsArray() @IsUUID('all', { each: true }) productIds: string[];
+@IsArray() @IsUUID('all', { each: true }) productIds!: string[];
 ```
 
 ## 신뢰도 시스템 DTO

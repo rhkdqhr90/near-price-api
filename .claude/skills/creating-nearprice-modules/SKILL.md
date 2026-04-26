@@ -61,6 +61,13 @@ src/<module-name>/
    @Type(() => Date) @IsDate() saleEndDate?: Date;
    ```
 
+   **TypeScript strict init 대응**: DTO의 필수 필드는 `!` definite assignment 사용
+   ```typescript
+   @IsString()
+   @IsNotEmpty()
+   name!: string;
+   ```
+
 ### 아키텍처
 7. **Controller는 thin** — 로직 없이 Service 호출만
 8. **findOne 실패 시 NotFoundException** — null 반환 금지
