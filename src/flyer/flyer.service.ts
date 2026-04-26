@@ -46,7 +46,7 @@ export class FlyerService {
   async findAllFlyers(): Promise<FlyerResponseDto[]> {
     const flyers = await this.flyerRepository.find({
       where: { isActive: true },
-      relations: ['ownerApplication'],
+      relations: ['ownerApplication', 'ownerApplication.store'],
       order: { createdAt: 'DESC' },
     });
     return flyers.map((f) => FlyerResponseDto.from(f));
@@ -55,7 +55,7 @@ export class FlyerService {
   async findOneFlyer(id: string): Promise<FlyerResponseDto> {
     const flyer = await this.flyerRepository.findOne({
       where: { id, isActive: true },
-      relations: ['ownerApplication'],
+      relations: ['ownerApplication', 'ownerApplication.store'],
     });
     if (!flyer) {
       throw new NotFoundException('전단지를 찾을 수 없습니다.');
@@ -76,7 +76,15 @@ export class FlyerService {
       this.logger.warn('전단지 FCM 알림 실패', (err as Error)?.message),
     );
 
-    return FlyerResponseDto.from(saved);
+    const reloaded = await this.flyerRepository.findOne({
+      where: { id: saved.id },
+      relations: ['ownerApplication', 'ownerApplication.store'],
+    });
+    if (!reloaded) {
+      throw new NotFoundException('전단지를 찾을 수 없습니다.');
+    }
+
+    return FlyerResponseDto.from(reloaded);
   }
 
   async findMyFlyers(userId: string): Promise<FlyerResponseDto[]> {
@@ -92,7 +100,7 @@ export class FlyerService {
 
     const flyers = await this.flyerRepository.find({
       where: { ownerApplication: { id: ownerApplication.id } },
-      relations: ['ownerApplication'],
+      relations: ['ownerApplication', 'ownerApplication.store'],
       order: { createdAt: 'DESC' },
     });
     return flyers.map((flyer) => FlyerResponseDto.from(flyer));
@@ -123,7 +131,7 @@ export class FlyerService {
 
     const reloaded = await this.flyerRepository.findOne({
       where: { id: saved.id },
-      relations: ['ownerApplication'],
+      relations: ['ownerApplication', 'ownerApplication.store'],
     });
     if (!reloaded) {
       throw new NotFoundException('전단지를 찾을 수 없습니다.');
@@ -181,7 +189,10 @@ export class FlyerService {
     id: string,
     dto: UpdateFlyerDto,
   ): Promise<FlyerResponseDto> {
-    const flyer = await this.flyerRepository.findOne({ where: { id } });
+    const flyer = await this.flyerRepository.findOne({
+      where: { id },
+      relations: ['ownerApplication', 'ownerApplication.store'],
+    });
     if (!flyer) {
       throw new NotFoundException('전단지를 찾을 수 없습니다.');
     }
@@ -201,7 +212,7 @@ export class FlyerService {
         id,
         ownerApplication: { id: ownerApplication.id },
       },
-      relations: ['ownerApplication'],
+      relations: ['ownerApplication', 'ownerApplication.store'],
     });
     if (!flyer) {
       throw new NotFoundException('내 전단지를 찾을 수 없습니다.');

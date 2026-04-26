@@ -9,10 +9,13 @@ import {
 } from 'typeorm';
 import { OwnerApplication } from '../../owner-application/entities/owner-application.entity';
 
+export type FlyerTemplateType = 'classic' | 'retro' | 'news' | 'coupon';
+
 export interface FlyerProductItem {
   id: string;
   name: string;
   emoji: string;
+  imageUrl: string | null;
   originalPrice: number | null;
   salePrice: number;
   badges: Array<{ label: string; type: 'red' | 'yellow' | 'blue' }>;
@@ -58,6 +61,9 @@ export class Flyer {
 
   @Column({ default: '🛒' })
   emoji: string;
+
+  @Column({ type: 'varchar', default: 'classic' })
+  templateType: FlyerTemplateType;
 
   @Column({ nullable: true })
   warningText: string;

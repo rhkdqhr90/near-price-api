@@ -2,6 +2,7 @@ import type {
   Flyer,
   FlyerProductItem,
   FlyerReviewItem,
+  FlyerTemplateType,
 } from '../entities/flyer.entity';
 
 export class FlyerResponseDto {
@@ -14,11 +15,13 @@ export class FlyerResponseDto {
   highlight: string;
   bgColor: string;
   emoji: string;
+  templateType: FlyerTemplateType;
   warningText: string | null;
   ownerQuote: string | null;
   ownerName: string | null;
   ownerRole: string | null;
   storeAddress: string | null;
+  storeId: string | null;
   storeRating: number | null;
   storeReviewCount: number | null;
   products: FlyerProductItem[] | null;
@@ -39,11 +42,13 @@ export class FlyerResponseDto {
     dto.highlight = flyer.highlight;
     dto.bgColor = flyer.bgColor;
     dto.emoji = flyer.emoji;
+    dto.templateType = flyer.templateType;
     dto.warningText = flyer.warningText ?? null;
     dto.ownerQuote = flyer.ownerQuote ?? null;
     dto.ownerName = flyer.ownerName ?? null;
     dto.ownerRole = flyer.ownerRole ?? null;
     dto.storeAddress = flyer.storeAddress ?? null;
+    dto.storeId = flyer.ownerApplication?.store?.id ?? null;
     dto.storeRating = flyer.storeRating ?? null;
     dto.storeReviewCount = flyer.storeReviewCount ?? null;
     dto.products = flyer.products ?? null;

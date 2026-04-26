@@ -30,6 +30,25 @@ interface KakaoUserInfo {
   };
 }
 
+const isKakaoHostedImageUrl = (rawUrl: string | null | undefined): boolean => {
+  if (!rawUrl) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(rawUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    return (
+      hostname === 'k.kakaocdn.net' ||
+      hostname.endsWith('.kakaocdn.net') ||
+      hostname === 'kakao.com' ||
+      hostname.endsWith('.kakao.com')
+    );
+  } catch {
+    return false;
+  }
+};
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -157,14 +176,22 @@ export class AuthService {
     });
 
     if (existing) {
-      // 기존 유저: 카카오 프로필 사진 업데이트 (변경됐을 수 있으므로)
+      // 기존 유저:
+      // - 사용자가 앱에서 직접 설정한 이미지(비-Kakao URL)는 유지
+      // - 현재 값이 null 이거나 Kakao URL일 때만 Kakao 프로필로 동기화
       const newProfileImage =
         kakaoUser.kakao_account?.profile?.profile_image_url ??
         kakaoUser.kakao_account?.profile?.thumbnail_image_url ??
         null;
+      const currentProfileImage = existing.user.profileImageUrl;
+      const shouldSyncKakaoProfile =
+        currentProfileImage === null ||
+        isKakaoHostedImageUrl(currentProfileImage);
+
       if (
         newProfileImage &&
-        existing.user.profileImageUrl !== newProfileImage
+        shouldSyncKakaoProfile &&
+        currentProfileImage !== newProfileImage
       ) {
         await this.userRepository.update(existing.user.id, {
           profileImageUrl: newProfileImage,

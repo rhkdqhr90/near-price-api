@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsBoolean,
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -32,6 +33,11 @@ export class FlyerProductItemDto {
   @IsString()
   @IsNotEmpty()
   emoji: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(2000)
+  imageUrl?: string | null;
 
   @IsNumber()
   @IsOptional()
@@ -117,6 +123,11 @@ export class CreateFlyerDto {
   @IsOptional()
   @MaxLength(10)
   emoji?: string;
+
+  @IsString()
+  @IsOptional()
+  @IsIn(['classic', 'retro', 'news', 'coupon'])
+  templateType?: 'classic' | 'retro' | 'news' | 'coupon';
 
   @IsString()
   @IsOptional()
