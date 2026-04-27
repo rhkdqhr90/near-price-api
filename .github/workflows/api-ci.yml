@@ -1,0 +1,176 @@
+name: API CI
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'deploy/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'nest-cli.json'
+      - 'tsconfig.json'
+      - 'tsconfig.build.json'
+      - '.github/workflows/api-ci.yml'
+      - '.github/workflows/api-deploy.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'deploy/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'nest-cli.json'
+      - 'tsconfig.json'
+      - 'tsconfig.build.json'
+      - '.github/workflows/api-ci.yml'
+      - '.github/workflows/api-deploy.yml'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+  AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID || '008967453433' }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'near-price-api' }}
+  DEPLOY_BUCKET: ${{ vars.DEPLOY_BUCKET || 'near-price-uploads-20260413105546966700000004' }}
+  ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::008967453433:role/near-price-github-actions-deploy' }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v5
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: 의존성 설치
+        run: npm ci --legacy-peer-deps
+
+      - name: 소스 린트
+        run: npx eslint "src/**/*.ts" --ignore-pattern "**/*.spec.ts" --ignore-pattern "src/database/migrations/*.ts"
+
+      - name: 타입체크
+        run: npx tsc --noEmit
+
+      - name: 프로덕션 빌드
+        run: npm run build
+
+  publish-image:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs:
+      - validate
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v5
+
+      - name: 배포 메타데이터 생성
+        id: meta
+        run: |
+          set -euo pipefail
+          SHORT_SHA="${GITHUB_SHA::7}"
+          IMAGE_TAG="gha-${SHORT_SHA}-${GITHUB_RUN_NUMBER}"
+          ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          IMAGE_URI_TAGGED="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+          SOURCE_S3_KEY="deploy/source/${GITHUB_SHA}.tar.gz"
+
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "ecr_registry=${ECR_REGISTRY}" >> "$GITHUB_OUTPUT"
+          echo "image_uri_tagged=${IMAGE_URI_TAGGED}" >> "$GITHUB_OUTPUT"
+          echo "source_s3_key=${SOURCE_S3_KEY}" >> "$GITHUB_OUTPUT"
+
+      - name: AWS OIDC 인증
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ env.ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: ECR 로그인
+        run: |
+          set -euo pipefail
+          aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${{ steps.meta.outputs.ecr_registry }}"
+
+      - name: Docker 이미지 빌드 및 푸시
+        run: |
+          set -euo pipefail
+          docker build -f deploy/Dockerfile -t "${{ steps.meta.outputs.image_uri_tagged }}" .
+          docker push "${{ steps.meta.outputs.image_uri_tagged }}"
+
+      - name: ECR Digest 조회
+        id: digest
+        run: |
+          set -euo pipefail
+          IMAGE_DIGEST=$(aws ecr describe-images \
+            --region "${AWS_REGION}" \
+            --repository-name "${ECR_REPOSITORY}" \
+            --image-ids imageTag="${{ steps.meta.outputs.image_tag }}" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text)
+
+          if [ -z "${IMAGE_DIGEST}" ] || [ "${IMAGE_DIGEST}" = "None" ]; then
+            echo "::error::Unable to resolve image digest"
+            exit 1
+          fi
+
+          IMAGE_URI_DIGEST="${{ steps.meta.outputs.ecr_registry }}/${ECR_REPOSITORY}@${IMAGE_DIGEST}"
+
+          echo "image_digest=${IMAGE_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "image_uri_digest=${IMAGE_URI_DIGEST}" >> "$GITHUB_OUTPUT"
+
+      - name: 소스 아카이브 업로드
+        run: |
+          set -euo pipefail
+          git archive --format=tar.gz -o near-price-api-source.tar.gz HEAD
+          aws s3 cp near-price-api-source.tar.gz "s3://${DEPLOY_BUCKET}/${{ steps.meta.outputs.source_s3_key }}" --region "${AWS_REGION}"
+
+      - name: 배포 이벤트 발행
+        env:
+          IMAGE_URI_DIGEST: ${{ steps.digest.outputs.image_uri_digest }}
+          IMAGE_DIGEST: ${{ steps.digest.outputs.image_digest }}
+          SOURCE_S3_KEY: ${{ steps.meta.outputs.source_s3_key }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = {
+            'event_type': 'api_deploy_ready',
+            'client_payload': {
+              'image_uri': os.environ['IMAGE_URI_DIGEST'],
+              'image_digest': os.environ['IMAGE_DIGEST'],
+              'source_s3_key': os.environ['SOURCE_S3_KEY'],
+              'commit_sha': os.environ['GITHUB_SHA'],
+              'run_id': os.environ['GITHUB_RUN_ID'],
+            },
+          }
+          Path('dispatch-payload.json').write_text(
+            json.dumps(payload, ensure_ascii=True),
+            encoding='utf-8',
+          )
+          PY
+
+          curl -fsSL -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/dispatches" \
+            --data @dispatch-payload.json
+
+      - name: CI 요약
+        run: |
+          echo "## API 이미지 게시 완료" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Image: \`${{ steps.digest.outputs.image_uri_digest }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Source: \`s3://${DEPLOY_BUCKET}/${{ steps.meta.outputs.source_s3_key }}\`" >> "$GITHUB_STEP_SUMMARY"

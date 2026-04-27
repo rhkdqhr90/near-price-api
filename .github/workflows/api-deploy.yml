@@ -1,129 +1,85 @@
-name: API 빌드/배포
+name: API CD
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'src/**'
-      - 'deploy/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'nest-cli.json'
-      - 'tsconfig.json'
-      - 'tsconfig.build.json'
-      - '.github/workflows/api-deploy.yml'
+  repository_dispatch:
+    types:
+      - api_deploy_ready
   workflow_dispatch:
+    inputs:
+      image_uri:
+        description: ECR image URI with digest (repo@sha256:...)
+        required: true
+        type: string
+      source_s3_key:
+        description: Source archive S3 key (deploy/source/...tar.gz)
+        required: true
+        type: string
+      commit_sha:
+        description: Commit SHA for deployment
+        required: false
+        type: string
 
 concurrency:
   group: api-deploy-main
   cancel-in-progress: false
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+  AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID || '008967453433' }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'near-price-api' }}
+  DEPLOY_BUCKET: ${{ vars.DEPLOY_BUCKET || 'near-price-uploads-20260413105546966700000004' }}
+  EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID || 'i-0a3d110162a4743c3' }}
+  DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/home/ec2-user/near-price-api' }}
+  ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::008967453433:role/near-price-github-actions-deploy' }}
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: read
       id-token: write
-    env:
-      AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
-      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID || '008967453433' }}
-      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'near-price-api' }}
-      DEPLOY_BUCKET: ${{ vars.DEPLOY_BUCKET || 'near-price-uploads-20260413105546966700000004' }}
-      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID || 'i-0a3d110162a4743c3' }}
-      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
-      ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::008967453433:role/near-price-github-actions-deploy' }}
-
     steps:
-      - name: 저장소 체크아웃
-        uses: actions/checkout@v5
-
-      - name: 필수 변수 확인
+      - name: 배포 파라미터 준비
+        id: params
         run: |
           set -euo pipefail
-          missing=0
-          for key in AWS_REGION AWS_ACCOUNT_ID ECR_REPOSITORY DEPLOY_BUCKET EC2_INSTANCE_ID ROLE_TO_ASSUME; do
-            if [ -z "${!key:-}" ]; then
-              echo "::error::Missing required configuration: ${key}"
-              missing=1
-            fi
-          done
-          if [ "$missing" -ne 0 ]; then
+
+          if [ "${GITHUB_EVENT_NAME}" = "repository_dispatch" ]; then
+            IMAGE_URI="${{ github.event.client_payload.image_uri }}"
+            SOURCE_S3_KEY="${{ github.event.client_payload.source_s3_key }}"
+            COMMIT_SHA="${{ github.event.client_payload.commit_sha }}"
+          else
+            IMAGE_URI="${{ github.event.inputs.image_uri }}"
+            SOURCE_S3_KEY="${{ github.event.inputs.source_s3_key }}"
+            COMMIT_SHA="${{ github.event.inputs.commit_sha }}"
+          fi
+
+          if [ -z "${IMAGE_URI}" ] || [ -z "${SOURCE_S3_KEY}" ]; then
+            echo "::error::Missing deployment parameters: image_uri/source_s3_key"
             exit 1
           fi
 
-      - name: Node.js 설정
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
+          ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-      - name: 의존성 설치
-        run: npm ci --legacy-peer-deps
-
-      - name: 타입체크
-        run: npx tsc --noEmit
-
-      - name: 프로덕션 빌드
-        run: npm run build
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+          echo "source_s3_key=${SOURCE_S3_KEY}" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=${COMMIT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "ecr_registry=${ECR_REGISTRY}" >> "$GITHUB_OUTPUT"
 
       - name: AWS OIDC 인증
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ env.ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: 배포 메타데이터 생성
-        id: meta
-        run: |
-          set -euo pipefail
-          SHORT_SHA="${GITHUB_SHA::7}"
-          IMAGE_TAG="gha-${SHORT_SHA}-${GITHUB_RUN_NUMBER}"
-          ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
-          SOURCE_ARCHIVE="near-price-api-source-${IMAGE_TAG}.tar.gz"
-          SOURCE_S3_KEY="deploy/source/${SOURCE_ARCHIVE}"
-          DEPLOY_PATH_VALUE="${DEPLOY_PATH:-/home/ec2-user/near-price-api}"
-
-          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
-          echo "ecr_registry=${ECR_REGISTRY}" >> "$GITHUB_OUTPUT"
-          echo "source_archive=${SOURCE_ARCHIVE}" >> "$GITHUB_OUTPUT"
-          echo "source_s3_key=${SOURCE_S3_KEY}" >> "$GITHUB_OUTPUT"
-          echo "deploy_path=${DEPLOY_PATH_VALUE}" >> "$GITHUB_OUTPUT"
-
-      - name: API Docker 이미지 빌드
-        run: |
-          set -euo pipefail
-          docker build -f deploy/Dockerfile -t "${{ steps.meta.outputs.image_uri }}" .
-
-      - name: ECR 로그인
-        run: |
-          set -euo pipefail
-          aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${{ steps.meta.outputs.ecr_registry }}"
-
-      - name: ECR 이미지 푸시
-        run: |
-          set -euo pipefail
-          docker push "${{ steps.meta.outputs.image_uri }}"
-
-      - name: 소스 아카이브 생성
-        run: |
-          set -euo pipefail
-          git archive --format=tar.gz -o "${{ steps.meta.outputs.source_archive }}" HEAD
-
-      - name: 소스 아카이브 업로드
-        run: |
-          set -euo pipefail
-          aws s3 cp "${{ steps.meta.outputs.source_archive }}" "s3://${DEPLOY_BUCKET}/${{ steps.meta.outputs.source_s3_key }}" --region "${AWS_REGION}"
-
       - name: SSM 배포 실행
         id: deploy
         env:
-          IMAGE_URI: ${{ steps.meta.outputs.image_uri }}
-          ECR_REGISTRY: ${{ steps.meta.outputs.ecr_registry }}
-          SOURCE_S3_KEY: ${{ steps.meta.outputs.source_s3_key }}
-          DEPLOY_PATH_VALUE: ${{ steps.meta.outputs.deploy_path }}
+          IMAGE_URI: ${{ steps.params.outputs.image_uri }}
+          SOURCE_S3_KEY: ${{ steps.params.outputs.source_s3_key }}
+          ECR_REGISTRY: ${{ steps.params.outputs.ecr_registry }}
         run: |
           set -euo pipefail
 
@@ -134,16 +90,20 @@ jobs:
 
           commands = [
             'set -euo pipefail',
+            'PREV_IMAGE=$(docker inspect near-price-api --format "{{.Config.Image}}" 2>/dev/null || true)',
             f'aws s3 cp s3://{os.environ["DEPLOY_BUCKET"]}/{os.environ["SOURCE_S3_KEY"]} /tmp/near-price-api-source.tar.gz --region {os.environ["AWS_REGION"]}',
-            f'mkdir -p {os.environ["DEPLOY_PATH_VALUE"]}',
-            f'tar --no-same-owner -xzf /tmp/near-price-api-source.tar.gz -C {os.environ["DEPLOY_PATH_VALUE"]}',
+            f'mkdir -p {os.environ["DEPLOY_PATH"]}',
+            f'tar --no-same-owner -xzf /tmp/near-price-api-source.tar.gz -C {os.environ["DEPLOY_PATH"]}',
             f'aws ecr get-login-password --region {os.environ["AWS_REGION"]} | docker login --username AWS --password-stdin {os.environ["ECR_REGISTRY"]}',
-            f'docker pull {os.environ["IMAGE_URI"]}',
-            f'cd {os.environ["DEPLOY_PATH_VALUE"]}',
+            f'timeout 1200 docker pull {os.environ["IMAGE_URI"]}',
+            f'cd {os.environ["DEPLOY_PATH"]}',
             f'API_IMAGE={os.environ["IMAGE_URI"]} docker compose -f deploy/docker-compose.yml --env-file .env up -d --no-build api nginx',
-            'docker exec near-price-api npm run typeorm:migration:run:prod',
-            'curl -fsS http://localhost/health > /dev/null',
+            'timeout 600 docker exec near-price-api npm run typeorm:migration:run:prod',
+            'healthy=0',
+            'for i in $(seq 1 60); do if curl -fsS http://localhost/health >/dev/null; then healthy=1; break; fi; sleep 5; done',
+            'if [ "$healthy" -eq 0 ]; then if [ -n "$PREV_IMAGE" ]; then API_IMAGE="$PREV_IMAGE" docker compose -f deploy/docker-compose.yml --env-file .env up -d --no-build api nginx; rollback_healthy=0; for i in $(seq 1 30); do if curl -fsS http://localhost/health >/dev/null; then rollback_healthy=1; break; fi; sleep 5; done; if [ "$rollback_healthy" -eq 1 ]; then echo "ROLLBACK_SUCCESS image=$PREV_IMAGE"; else echo "ROLLBACK_FAILED image=$PREV_IMAGE"; fi; fi; echo "DEPLOY_HEALTH_FAILED"; exit 1; fi',
             'rm -f /tmp/near-price-api-source.tar.gz',
+            'echo "DEPLOY_SUCCESS"',
           ]
 
           Path('ssm-commands.json').write_text(
@@ -164,13 +124,14 @@ jobs:
           echo "command_id=${COMMAND_ID}" >> "$GITHUB_OUTPUT"
 
       - name: SSM 배포 완료 대기
+        id: wait
         env:
           COMMAND_ID: ${{ steps.deploy.outputs.command_id }}
         run: |
           set -euo pipefail
 
           STATUS=""
-          for _ in {1..30}; do
+          for _ in {1..160}; do
             STATUS=$(aws ssm get-command-invocation \
               --region "${AWS_REGION}" \
               --command-id "${COMMAND_ID}" \
@@ -178,28 +139,23 @@ jobs:
               --query "Status" \
               --output text || true)
 
-            if [ "${STATUS}" = "Success" ]; then
+            if [ "${STATUS}" = "Success" ] || [ "${STATUS}" = "Cancelled" ] || [ "${STATUS}" = "TimedOut" ] || [ "${STATUS}" = "Failed" ]; then
               break
             fi
 
-            if [ "${STATUS}" = "Cancelled" ] || [ "${STATUS}" = "TimedOut" ] || [ "${STATUS}" = "Failed" ]; then
-              break
-            fi
-
-            sleep 10
+            sleep 15
           done
 
-          echo "SSM status: ${STATUS}"
+          echo "status=${STATUS}" >> "$GITHUB_OUTPUT"
 
-          if [ "${STATUS}" = "Success" ] || [ "${STATUS}" = "Cancelled" ] || [ "${STATUS}" = "TimedOut" ] || [ "${STATUS}" = "Failed" ]; then
-            aws ssm get-command-invocation \
-              --region "${AWS_REGION}" \
-              --command-id "${COMMAND_ID}" \
-              --instance-id "${EC2_INSTANCE_ID}" \
-              --query '{Status:Status,ResponseCode:ResponseCode,StandardOutputContent:StandardOutputContent,StandardErrorContent:StandardErrorContent}' \
-              --output json > ssm-result.json
-            cat ssm-result.json
-          fi
+          aws ssm get-command-invocation \
+            --region "${AWS_REGION}" \
+            --command-id "${COMMAND_ID}" \
+            --instance-id "${EC2_INSTANCE_ID}" \
+            --query '{Status:Status,ResponseCode:ResponseCode,StandardOutputContent:StandardOutputContent,StandardErrorContent:StandardErrorContent}' \
+            --output json > ssm-result.json
+
+          cat ssm-result.json
 
           if [ "${STATUS}" = "Cancelled" ] || [ "${STATUS}" = "TimedOut" ] || [ "${STATUS}" = "Failed" ]; then
             echo "::error::SSM deployment failed"
@@ -207,12 +163,16 @@ jobs:
           fi
 
           if [ "${STATUS}" != "Success" ]; then
-            echo "::notice::SSM command is still ${STATUS}. Continue monitoring with command id ${COMMAND_ID}."
+            echo "::error::SSM command ended in unexpected status: ${STATUS}"
+            exit 1
           fi
 
       - name: 배포 요약
+        if: always()
         run: |
-          echo "## API 배포 완료" >> "$GITHUB_STEP_SUMMARY"
-          echo "- 이미지: \`${{ steps.meta.outputs.image_uri }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- 인스턴스: \`${{ env.EC2_INSTANCE_ID }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "## API 배포 결과" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Image: \`${{ steps.params.outputs.image_uri }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Source: \`s3://${DEPLOY_BUCKET}/${{ steps.params.outputs.source_s3_key }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Instance: \`${EC2_INSTANCE_ID}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- SSM Command ID: \`${{ steps.deploy.outputs.command_id }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- SSM Status: \`${{ steps.wait.outputs.status }}\`" >> "$GITHUB_STEP_SUMMARY"
