@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Delete,
   Get,
@@ -58,7 +59,14 @@ export class NotificationController {
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
   ): Promise<NotificationListResponse> {
-    const limitNum = limit ? parseInt(limit, 10) : undefined;
+    let limitNum: number | undefined;
+    if (limit !== undefined) {
+      limitNum = Number.parseInt(limit, 10);
+      if (Number.isNaN(limitNum)) {
+        throw new BadRequestException('limit은 숫자여야 합니다.');
+      }
+    }
+
     const { items, nextCursor } = await this.notificationService.findByUser(
       user.userId,
       { limit: limitNum, cursor },

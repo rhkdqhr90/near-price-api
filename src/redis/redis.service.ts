@@ -16,16 +16,21 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   /** Redis 클라이언트가 연결되어 있는지 여부 */
   get available(): boolean {
-    return this.client !== null;
+    return this.client?.isOpen === true;
   }
 
   async onModuleInit(): Promise<void> {
     const url = this.configService.get<string>('REDIS_URL');
+    const env = this.configService.get<string>('NODE_ENV');
+    const isProduction = env === 'production';
+
     if (!url) {
-      const env = this.configService.get<string>('NODE_ENV');
-      if (env === 'production') {
+      if (isProduction) {
         this.logger.error(
           'REDIS_URL not set in production — refresh token rotation and revocation DISABLED',
+        );
+        throw new Error(
+          'REDIS_URL not set in production. Refusing to start without refresh token revocation.',
         );
       } else {
         this.logger.warn(
@@ -43,10 +48,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       await this.client.connect();
       this.logger.log('Redis connected');
     } catch (err: unknown) {
-      this.logger.error(
-        'Redis connection failed — falling back to no-op',
-        (err as Error)?.message,
-      );
+      this.logger.error('Redis connection failed', (err as Error)?.message);
+      if (isProduction) {
+        throw new Error(
+          'Redis connection failed in production. Refusing to start without refresh token revocation.',
+        );
+      }
       this.client = null;
     }
   }
@@ -59,19 +66,19 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   /** 값 저장 (TTL: 초 단위) */
   async set(key: string, value: string, ttlSeconds: number): Promise<void> {
-    if (!this.client) return;
+    if (!this.available || !this.client) return;
     await this.client.set(key, value, { EX: ttlSeconds });
   }
 
   /** 값 조회 */
   async get(key: string): Promise<string | null> {
-    if (!this.client) return null;
+    if (!this.available || !this.client) return null;
     return await this.client.get(key);
   }
 
   /** 키 삭제 */
   async del(key: string): Promise<void> {
-    if (!this.client) return;
+    if (!this.available || !this.client) return;
     await this.client.del(key);
   }
 }

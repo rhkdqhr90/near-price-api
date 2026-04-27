@@ -45,6 +45,7 @@ services:
 
   # NestJS API 서버 (단일 인스턴스)
   api:
+    image: ${API_IMAGE:-near-price-api:local}
     build:
       context: ../
       dockerfile: deploy/Dockerfile
