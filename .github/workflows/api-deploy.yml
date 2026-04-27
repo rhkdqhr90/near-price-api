@@ -27,11 +27,11 @@ jobs:
       contents: read
       id-token: write
     env:
-      AWS_REGION: ${{ vars.AWS_REGION }}
-      DEPLOY_BUCKET: ${{ vars.DEPLOY_BUCKET }}
-      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      DEPLOY_BUCKET: ${{ vars.DEPLOY_BUCKET || 'near-price-uploads-20260413105546966700000004' }}
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID || 'i-0a3d110162a4743c3' }}
       DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
-      ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_ARN }}
+      ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::008967453433:role/near-price-github-actions-deploy' }}
 
     steps:
       - name: 저장소 체크아웃
