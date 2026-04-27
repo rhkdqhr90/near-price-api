@@ -28,20 +28,21 @@ jobs:
       id-token: write
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
-      DEPLOY_BUCKET: ${{ vars.DEPLOY_BUCKET || 'near-price-uploads-20260413105546966700000004' }}
+      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID || '008967453433' }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'near-price-api' }}
       EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID || 'i-0a3d110162a4743c3' }}
       DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
       ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::008967453433:role/near-price-github-actions-deploy' }}
 
     steps:
       - name: 저장소 체크아웃
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 필수 변수 확인
         run: |
           set -euo pipefail
           missing=0
-          for key in AWS_REGION DEPLOY_BUCKET EC2_INSTANCE_ID ROLE_TO_ASSUME; do
+          for key in AWS_REGION AWS_ACCOUNT_ID ECR_REPOSITORY EC2_INSTANCE_ID ROLE_TO_ASSUME; do
             if [ -z "${!key:-}" ]; then
               echo "::error::Missing required configuration: ${key}"
               missing=1
@@ -66,49 +67,46 @@ jobs:
       - name: 프로덕션 빌드
         run: npm run build
 
-      - name: 배포 메타데이터 생성
-        id: meta
-        run: |
-          set -euo pipefail
-          SHORT_SHA="${GITHUB_SHA::7}"
-          IMAGE_TAG="gha-${SHORT_SHA}-${GITHUB_RUN_NUMBER}"
-          IMAGE_REF="near-price-api:${IMAGE_TAG}"
-          ARTIFACT_NAME="near-price-api-${IMAGE_TAG}.tar.gz"
-          S3_KEY="deploy/images/${ARTIFACT_NAME}"
-          DEPLOY_PATH_VALUE="${DEPLOY_PATH:-/home/ec2-user/near-price-api}"
-
-          echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
-          echo "artifact_name=${ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
-          echo "s3_key=${S3_KEY}" >> "$GITHUB_OUTPUT"
-          echo "deploy_path=${DEPLOY_PATH_VALUE}" >> "$GITHUB_OUTPUT"
-
-      - name: API Docker 이미지 빌드
-        run: |
-          set -euo pipefail
-          docker build -f deploy/Dockerfile -t "${{ steps.meta.outputs.image_ref }}" .
-
-      - name: Docker 이미지 아카이브 생성
-        run: |
-          set -euo pipefail
-          docker save "${{ steps.meta.outputs.image_ref }}" | gzip > "${{ steps.meta.outputs.artifact_name }}"
-          ls -lh "${{ steps.meta.outputs.artifact_name }}"
-
       - name: AWS OIDC 인증
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: S3 아티팩트 업로드
+      - name: 배포 메타데이터 생성
+        id: meta
         run: |
           set -euo pipefail
-          aws s3 cp "${{ steps.meta.outputs.artifact_name }}" "s3://${DEPLOY_BUCKET}/${{ steps.meta.outputs.s3_key }}" --region "${AWS_REGION}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          IMAGE_TAG="gha-${SHORT_SHA}-${GITHUB_RUN_NUMBER}"
+          ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+          DEPLOY_PATH_VALUE="${DEPLOY_PATH:-/home/ec2-user/near-price-api}"
+
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+          echo "ecr_registry=${ECR_REGISTRY}" >> "$GITHUB_OUTPUT"
+          echo "deploy_path=${DEPLOY_PATH_VALUE}" >> "$GITHUB_OUTPUT"
+
+      - name: API Docker 이미지 빌드
+        run: |
+          set -euo pipefail
+          docker build -f deploy/Dockerfile -t "${{ steps.meta.outputs.image_uri }}" .
+
+      - name: ECR 로그인
+        run: |
+          set -euo pipefail
+          aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${{ steps.meta.outputs.ecr_registry }}"
+
+      - name: ECR 이미지 푸시
+        run: |
+          set -euo pipefail
+          docker push "${{ steps.meta.outputs.image_uri }}"
 
       - name: SSM 배포 실행
         id: deploy
         env:
-          IMAGE_REF: ${{ steps.meta.outputs.image_ref }}
-          S3_KEY: ${{ steps.meta.outputs.s3_key }}
+          IMAGE_URI: ${{ steps.meta.outputs.image_uri }}
+          ECR_REGISTRY: ${{ steps.meta.outputs.ecr_registry }}
           DEPLOY_PATH_VALUE: ${{ steps.meta.outputs.deploy_path }}
         run: |
           set -euo pipefail
@@ -120,15 +118,12 @@ jobs:
 
           commands = [
             'set -euo pipefail',
-            f'mkdir -p {os.environ["DEPLOY_PATH_VALUE"]}',
-            f'aws s3 cp s3://{os.environ["DEPLOY_BUCKET"]}/{os.environ["S3_KEY"]} /tmp/near-price-api-image.tar.gz --region {os.environ["AWS_REGION"]}',
-            'gzip -t /tmp/near-price-api-image.tar.gz',
-            'gunzip -c /tmp/near-price-api-image.tar.gz | docker load',
+            f'aws ecr get-login-password --region {os.environ["AWS_REGION"]} | docker login --username AWS --password-stdin {os.environ["ECR_REGISTRY"]}',
+            f'docker pull {os.environ["IMAGE_URI"]}',
             f'cd {os.environ["DEPLOY_PATH_VALUE"]}',
-            f'API_IMAGE={os.environ["IMAGE_REF"]} docker compose -f deploy/docker-compose.yml --env-file .env up -d --no-build api nginx',
+            f'API_IMAGE={os.environ["IMAGE_URI"]} docker compose -f deploy/docker-compose.yml --env-file .env up -d --no-build api nginx',
             'docker exec near-price-api npm run typeorm:migration:run:prod',
             'curl -fsS http://localhost:3000/health > /dev/null',
-            'rm -f /tmp/near-price-api-image.tar.gz',
           ]
 
           Path('ssm-commands.json').write_text(
@@ -141,7 +136,7 @@ jobs:
             --region "${AWS_REGION}" \
             --instance-ids "${EC2_INSTANCE_ID}" \
             --document-name "AWS-RunShellScript" \
-            --comment "deploy near-price-api ${IMAGE_REF}" \
+            --comment "deploy near-price-api ${IMAGE_URI}" \
             --parameters file://ssm-commands.json \
             --query "Command.CommandId" \
             --output text)
@@ -193,7 +188,6 @@ jobs:
       - name: 배포 요약
         run: |
           echo "## API 배포 완료" >> "$GITHUB_STEP_SUMMARY"
-          echo "- 이미지: \\`${{ steps.meta.outputs.image_ref }}\\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- 아티팩트: \\`s3://${{ env.DEPLOY_BUCKET }}/${{ steps.meta.outputs.s3_key }}\\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- 인스턴스: \\`${{ env.EC2_INSTANCE_ID }}\\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- SSM Command ID: \\`${{ steps.deploy.outputs.command_id }}\\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 이미지: \`${{ steps.meta.outputs.image_uri }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 인스턴스: \`${{ env.EC2_INSTANCE_ID }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- SSM Command ID: \`${{ steps.deploy.outputs.command_id }}\`" >> "$GITHUB_STEP_SUMMARY"
