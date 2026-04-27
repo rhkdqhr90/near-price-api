@@ -30,6 +30,7 @@ jobs:
       AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
       AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID || '008967453433' }}
       ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'near-price-api' }}
+      DEPLOY_BUCKET: ${{ vars.DEPLOY_BUCKET || 'near-price-uploads-20260413105546966700000004' }}
       EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID || 'i-0a3d110162a4743c3' }}
       DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
       ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::008967453433:role/near-price-github-actions-deploy' }}
@@ -42,7 +43,7 @@ jobs:
         run: |
           set -euo pipefail
           missing=0
-          for key in AWS_REGION AWS_ACCOUNT_ID ECR_REPOSITORY EC2_INSTANCE_ID ROLE_TO_ASSUME; do
+          for key in AWS_REGION AWS_ACCOUNT_ID ECR_REPOSITORY DEPLOY_BUCKET EC2_INSTANCE_ID ROLE_TO_ASSUME; do
             if [ -z "${!key:-}" ]; then
               echo "::error::Missing required configuration: ${key}"
               missing=1
@@ -81,10 +82,14 @@ jobs:
           IMAGE_TAG="gha-${SHORT_SHA}-${GITHUB_RUN_NUMBER}"
           ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
           IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+          SOURCE_ARCHIVE="near-price-api-source-${IMAGE_TAG}.tar.gz"
+          SOURCE_S3_KEY="deploy/source/${SOURCE_ARCHIVE}"
           DEPLOY_PATH_VALUE="${DEPLOY_PATH:-/home/ec2-user/near-price-api}"
 
           echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
           echo "ecr_registry=${ECR_REGISTRY}" >> "$GITHUB_OUTPUT"
+          echo "source_archive=${SOURCE_ARCHIVE}" >> "$GITHUB_OUTPUT"
+          echo "source_s3_key=${SOURCE_S3_KEY}" >> "$GITHUB_OUTPUT"
           echo "deploy_path=${DEPLOY_PATH_VALUE}" >> "$GITHUB_OUTPUT"
 
       - name: API Docker 이미지 빌드
@@ -102,11 +107,22 @@ jobs:
           set -euo pipefail
           docker push "${{ steps.meta.outputs.image_uri }}"
 
+      - name: 소스 아카이브 생성
+        run: |
+          set -euo pipefail
+          git archive --format=tar.gz -o "${{ steps.meta.outputs.source_archive }}" HEAD
+
+      - name: 소스 아카이브 업로드
+        run: |
+          set -euo pipefail
+          aws s3 cp "${{ steps.meta.outputs.source_archive }}" "s3://${DEPLOY_BUCKET}/${{ steps.meta.outputs.source_s3_key }}" --region "${AWS_REGION}"
+
       - name: SSM 배포 실행
         id: deploy
         env:
           IMAGE_URI: ${{ steps.meta.outputs.image_uri }}
           ECR_REGISTRY: ${{ steps.meta.outputs.ecr_registry }}
+          SOURCE_S3_KEY: ${{ steps.meta.outputs.source_s3_key }}
           DEPLOY_PATH_VALUE: ${{ steps.meta.outputs.deploy_path }}
         run: |
           set -euo pipefail
@@ -118,12 +134,16 @@ jobs:
 
           commands = [
             'set -euo pipefail',
+            f'aws s3 cp s3://{os.environ["DEPLOY_BUCKET"]}/{os.environ["SOURCE_S3_KEY"]} /tmp/near-price-api-source.tar.gz --region {os.environ["AWS_REGION"]}',
+            f'mkdir -p {os.environ["DEPLOY_PATH_VALUE"]}',
+            f'tar --no-same-owner -xzf /tmp/near-price-api-source.tar.gz -C {os.environ["DEPLOY_PATH_VALUE"]}',
             f'aws ecr get-login-password --region {os.environ["AWS_REGION"]} | docker login --username AWS --password-stdin {os.environ["ECR_REGISTRY"]}',
             f'docker pull {os.environ["IMAGE_URI"]}',
             f'cd {os.environ["DEPLOY_PATH_VALUE"]}',
             f'API_IMAGE={os.environ["IMAGE_URI"]} docker compose -f deploy/docker-compose.yml --env-file .env up -d --no-build api nginx',
             'docker exec near-price-api npm run typeorm:migration:run:prod',
             'curl -fsS http://localhost/health > /dev/null',
+            'rm -f /tmp/near-price-api-source.tar.gz',
           ]
 
           Path('ssm-commands.json').write_text(
@@ -150,7 +170,7 @@ jobs:
           set -euo pipefail
 
           STATUS=""
-          for _ in {1..180}; do
+          for _ in {1..30}; do
             STATUS=$(aws ssm get-command-invocation \
               --region "${AWS_REGION}" \
               --command-id "${COMMAND_ID}" \
@@ -171,18 +191,23 @@ jobs:
 
           echo "SSM status: ${STATUS}"
 
-          aws ssm get-command-invocation \
-            --region "${AWS_REGION}" \
-            --command-id "${COMMAND_ID}" \
-            --instance-id "${EC2_INSTANCE_ID}" \
-            --query '{Status:Status,ResponseCode:ResponseCode,StandardOutputContent:StandardOutputContent,StandardErrorContent:StandardErrorContent}' \
-            --output json > ssm-result.json
+          if [ "${STATUS}" = "Success" ] || [ "${STATUS}" = "Cancelled" ] || [ "${STATUS}" = "TimedOut" ] || [ "${STATUS}" = "Failed" ]; then
+            aws ssm get-command-invocation \
+              --region "${AWS_REGION}" \
+              --command-id "${COMMAND_ID}" \
+              --instance-id "${EC2_INSTANCE_ID}" \
+              --query '{Status:Status,ResponseCode:ResponseCode,StandardOutputContent:StandardOutputContent,StandardErrorContent:StandardErrorContent}' \
+              --output json > ssm-result.json
+            cat ssm-result.json
+          fi
 
-          cat ssm-result.json
-
-          if [ "${STATUS}" != "Success" ]; then
+          if [ "${STATUS}" = "Cancelled" ] || [ "${STATUS}" = "TimedOut" ] || [ "${STATUS}" = "Failed" ]; then
             echo "::error::SSM deployment failed"
             exit 1
+          fi
+
+          if [ "${STATUS}" != "Success" ]; then
+            echo "::notice::SSM command is still ${STATUS}. Continue monitoring with command id ${COMMAND_ID}."
           fi
 
       - name: 배포 요약
