@@ -122,7 +122,8 @@ jobs:
             'set -euo pipefail',
             f'mkdir -p {os.environ["DEPLOY_PATH_VALUE"]}',
             f'aws s3 cp s3://{os.environ["DEPLOY_BUCKET"]}/{os.environ["S3_KEY"]} /tmp/near-price-api-image.tar.gz --region {os.environ["AWS_REGION"]}',
-            'docker load -i /tmp/near-price-api-image.tar.gz',
+            'gzip -t /tmp/near-price-api-image.tar.gz',
+            'gunzip -c /tmp/near-price-api-image.tar.gz | docker load',
             f'cd {os.environ["DEPLOY_PATH_VALUE"]}',
             f'API_IMAGE={os.environ["IMAGE_REF"]} docker compose -f deploy/docker-compose.yml --env-file .env up -d --no-build api nginx',
             'docker exec near-price-api npm run typeorm:migration:run:prod',
@@ -154,7 +155,7 @@ jobs:
           set -euo pipefail
 
           STATUS=""
-          for _ in {1..40}; do
+          for _ in {1..180}; do
             STATUS=$(aws ssm get-command-invocation \
               --region "${AWS_REGION}" \
               --command-id "${COMMAND_ID}" \
