@@ -109,19 +109,14 @@ jobs:
         id: digest
         run: |
           set -euo pipefail
-          IMAGE_DIGEST=$(aws ecr describe-images \
-            --region "${AWS_REGION}" \
-            --repository-name "${ECR_REPOSITORY}" \
-            --image-ids imageTag="${{ steps.meta.outputs.image_tag }}" \
-            --query 'imageDetails[0].imageDigest' \
-            --output text)
+
+          IMAGE_URI_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "${{ steps.meta.outputs.image_uri_tagged }}")
+          IMAGE_DIGEST="${IMAGE_URI_DIGEST##*@}"
 
           if [ -z "${IMAGE_DIGEST}" ] || [ "${IMAGE_DIGEST}" = "None" ]; then
             echo "::error::Unable to resolve image digest"
             exit 1
           fi
-
-          IMAGE_URI_DIGEST="${{ steps.meta.outputs.ecr_registry }}/${ECR_REPOSITORY}@${IMAGE_DIGEST}"
 
           echo "image_digest=${IMAGE_DIGEST}" >> "$GITHUB_OUTPUT"
           echo "image_uri_digest=${IMAGE_URI_DIGEST}" >> "$GITHUB_OUTPUT"
