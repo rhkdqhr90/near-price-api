@@ -203,6 +203,8 @@ export class PriceService {
       .orderBy('p.product_id', 'ASC')
       .addOrderBy('p.price', 'ASC')
       .addOrderBy('p.createdAt', 'DESC')
+      // tie-break: 동일 product_id × price × createdAt 시 결정적 선택 보장 (홈 카드 깜빡임 방지)
+      .addOrderBy('p.id', 'ASC')
       .take(limit)
       .skip((page - 1) * limit);
 
