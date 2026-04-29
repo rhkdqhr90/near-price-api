@@ -115,7 +115,7 @@ jobs:
             --region "${AWS_REGION}" \
             --instance-ids "${EC2_INSTANCE_ID}" \
             --document-name "AWS-RunShellScript" \
-            --comment "deploy near-price-api ${IMAGE_URI}" \
+            --comment "deploy near-price-api ${GITHUB_SHA::7}" \
             --parameters file://ssm-commands.json \
             --query "Command.CommandId" \
             --output text)
