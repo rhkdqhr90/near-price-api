@@ -94,7 +94,7 @@ jobs:
             f'mkdir -p {os.environ["DEPLOY_PATH"]}',
             f'tar --no-same-owner -xzf /tmp/near-price-api-source.tar.gz -C {os.environ["DEPLOY_PATH"]}',
             f'aws ecr get-login-password --region {os.environ["AWS_REGION"]} | docker login --username AWS --password-stdin {os.environ["ECR_REGISTRY"]}',
-            f'PULL_OK=0; for attempt in 1 2 3; do timeout 3600 docker pull {os.environ["IMAGE_URI"]} && PULL_OK=1 && break; echo "docker pull failed (attempt ${{attempt}}/3), retrying..."; sleep $((attempt * 15)); done; if [ "$PULL_OK" -ne 1 ]; then echo "DOCKER_PULL_FAILED"; exit 124; fi',
+            f'PULL_OK=0; for attempt in 1 2 3; do timeout 3600 docker pull {os.environ["IMAGE_URI"]} && PULL_OK=1 && break; echo "docker pull failed (attempt $attempt/3), retrying..."; sleep $((attempt * 15)); done; if [ "$PULL_OK" -ne 1 ]; then echo "DOCKER_PULL_FAILED"; exit 124; fi',
             f'cd {os.environ["DEPLOY_PATH"]}',
             f'API_IMAGE={os.environ["IMAGE_URI"]} docker compose -f deploy/docker-compose.yml --env-file .env up -d --no-build api nginx',
             'timeout 600 docker exec near-price-api npm run typeorm:migration:run:prod',
