@@ -160,6 +160,14 @@ SELECT indexname FROM pg_indexes WHERE tablename = 'stores';
 - [ ] 네이버 OAuth 로그인 추가 (`user_oauths.provider: 'naver'` 이미 준비됨)
 - [ ] 어드민 페이지 가격 승인/거절 워크플로우
 - [ ] 가격 이력 조회 API (현재는 isActive=false로 비활성화만 가능)
+- [ ] **S3 버킷 분리** — 현재 `near-price-uploads-*` 단일 버킷에 사용자 이미지/배포 아티팩트가
+  공존하는 것으로 추정. `near-price-uploads-*`(사용자 이미지)와 `near-price-deploy-artifacts-*`
+  (배포 source.tar.gz)로 분리. 목적: IAM 권한 분리, Lifecycle 분리(아티팩트 30일 expire),
+  사고 격리. Terraform `infra/` 변경 동반.
+- [ ] **새 키 기반 이미지 마이그레이션 도구** — 현재 `scripts/resize-existing-uploads.mjs`는 같은 키
+  덮어쓰기(+ CloudFront 무효화) 방식. 향후 대규모 재처리(수백 장 이상) 또는 정기 재인코딩 시엔
+  새 UUID 키 + DB `imageUrl` 일괄 UPDATE 방식 도구로 전환 권장. 무효화 비용 절감, 캐시 의미
+  명확화. SSM으로 EC2에서 실행하여 DB 자격증명 GitHub Actions 노출을 회피.
 
 ### P3 — 장기 계획
 
@@ -173,6 +181,7 @@ SELECT indexname FROM pg_indexes WHERE tablename = 'stores';
 
 | 날짜 | 작업 내용 |
 |------|-----------|
+| 2026-05-01 | 업로드 이미지 sharp 변환(1200px / JPEG q82) 적용. 기존 큰 객체 1회성 마이그레이션 워크플로(`migrate-uploads-resize.yml`) + 스크립트 추가. ContentType `image/jpeg` ↔ 키 `.jpg` 일치 보장(스크립트는 비-jpeg 키 스킵). |
 | 2026-04-02 | CLAUDE.md / PROJECT.md / PROGRESS.md 초기 작성 (AI 컨텍스트 파일) |
 | (이전) | Refresh Token 무효화 (Redis Rotation) 구현 |
 | (이전) | Rate Limiting (Throttler) 전체 엔드포인트 적용 |
