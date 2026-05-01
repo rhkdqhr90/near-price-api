@@ -17,12 +17,16 @@ import {
 /**
  * 업로드 이미지 변환 정책.
  * - 휴대폰 카메라 원본 사진(2~5MB)이 그대로 S3에 올라가던 문제 해결.
- * - 최대 1200x1200 (긴 변 기준) 안에 맞춤. 작은 사진은 확대하지 않음.
- * - JPEG 품질 82, mozjpeg 인코더 → 약 200~400KB로 압축.
+ * - 최대 800x800 (긴 변 기준) 안에 맞춤. 작은 사진은 확대하지 않음.
+ * - JPEG 품질 82, mozjpeg 인코더 → 약 100~250KB로 압축.
  * - EXIF orientation을 픽셀에 적용 후 메타데이터 제거 → 클라이언트 회전 처리 불필요 + 용량 절감.
  * - PNG/WebP 입력도 JPEG로 정규화하여 출력 일관성 확보 (상품/가격표 이미지에 알파 불필요).
+ *
+ * 800px 결정 근거: Glide 메모리 캐시 한도(디바이스에 따라 24~48MB) 내에서
+ * 홈 카드 N장이 모두 캐시 hit 유지되도록. 800x800 비트맵 ≈ 2.5MB → 8장 ≈ 20MB.
+ * 1200x1200(≈48MB / 8장)이면 한도 초과로 LRU eviction 발생 → 스크롤·탭 전환 시 재로드.
  */
-const IMAGE_MAX_DIMENSION = 1200;
+const IMAGE_MAX_DIMENSION = 800;
 const IMAGE_JPEG_QUALITY = 82;
 
 @Injectable()

@@ -34,7 +34,9 @@ import {
 import sharp from 'sharp';
 
 const PREFIX = 'uploads/';
-const IMAGE_MAX_DIMENSION = 1200;
+// upload.service.ts와 동일한 정책. 800px 한정으로 비트맵 메모리(≈2.5MB/장)가
+// Glide 메모리 캐시 한도 안에 들어와 스크롤·탭 전환 시 재로드 깜빡임 방지.
+const IMAGE_MAX_DIMENSION = 800;
 const IMAGE_JPEG_QUALITY = 82;
 const CONCURRENCY = 4;
 
