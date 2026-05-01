@@ -117,6 +117,9 @@ export class UploadService {
           Key: key,
           Body: normalized.buffer,
           ContentType: normalized.mimetype,
+          // CDN/클라이언트 캐시 정책 명시. UUID 키라 객체 내용은 절대 변경되지 않으므로 immutable 적합.
+          // 헤더 누락 시 클라이언트가 휴리스틱 캐시 결정 → FastImage 등에서 비일관 동작 발생.
+          CacheControl: 'public, max-age=31536000, immutable',
         }),
       );
     } catch (error) {
