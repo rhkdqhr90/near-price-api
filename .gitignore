@@ -82,3 +82,6 @@ deploy/.env.*
 !deploy/.env.example
 deploy/.md
 deploy/DEPLOY_COMMANDS_2026-04-22.md
+
+# 로컬 작업 노트 (커밋 금지)
+/IMAGE_CACHE_ARCHITECTURE.md
