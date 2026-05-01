@@ -1,0 +1,167 @@
+name: Migrate — Resize existing S3 uploads
+
+# 1회성 마이그레이션 워크플로우.
+#
+# 배경:
+#   upload.service.ts 에 sharp 변환을 추가하기 전에 업로드된 사진들이 원본 그대로
+#   (2~5MB) S3에 남아 있어 모바일 홈 화면에서 다운로드 지연/실패가 발생했다.
+#   이 워크플로우는 1회성으로 기존 객체들을 같은 키로 덮어써서 URL 변경 없이
+#   운영 화면을 즉시 정상화한다.
+#
+# 안전장치:
+#   - 기본값 dry-run = true. 실제 PUT 전에 영향 범위를 먼저 확인할 것.
+#   - 압축 결과가 원본보다 커지면 스킵 (역효과 방지).
+#   - 변환 실패 객체는 SKIP하고 계속 진행 (원본 보존).
+#   - 동시성 제한 (스크립트 내부 CONCURRENCY=4).
+#
+# 사용 절차:
+#   1) Run workflow → dry_run=true 로 한 번 실행 → 영향 범위/예상 절감 확인
+#   2) Run workflow → dry_run=false 로 다시 실행 → 실제 적용
+#   3) (필요 시) CloudFront Invalidation 별도 실행
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry-run (true: 변경 없이 시뮬레이션만, false: 실제 덮어쓰기)'
+        required: true
+        type: boolean
+        default: true
+      threshold_kb:
+        description: '이 크기(KB) 이상인 객체만 변환 대상으로 처리'
+        required: true
+        type: string
+        default: '500'
+      bucket_name:
+        description: 'S3 버킷명 (비우면 기본값 사용)'
+        required: false
+        type: string
+        default: ''
+      invalidate_cloudfront:
+        description: '리사이즈 후 CloudFront /uploads/* 경로 무효화 실행'
+        required: true
+        type: boolean
+        default: false
+      cloudfront_distribution_id:
+        description: 'CloudFront Distribution ID (비우면 vars.CLOUDFRONT_DISTRIBUTION_ID 사용)'
+        required: false
+        type: string
+        default: ''
+
+concurrency:
+  group: migrate-uploads-resize
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+  ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::008967453433:role/near-price-github-actions-deploy' }}
+  DEFAULT_BUCKET: ${{ vars.S3_UPLOADS_BUCKET || 'near-price-uploads-20260413105546966700000004' }}
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies (sharp + aws-sdk)
+        run: npm ci --legacy-peer-deps
+
+      - name: AWS OIDC 인증
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: 마이그레이션 파라미터 정리
+        id: params
+        run: |
+          set -euo pipefail
+          BUCKET="${{ inputs.bucket_name }}"
+          if [ -z "$BUCKET" ]; then
+            BUCKET="${DEFAULT_BUCKET}"
+          fi
+          echo "bucket=${BUCKET}" >> "$GITHUB_OUTPUT"
+          echo "dry_run_flag=$([ "${{ inputs.dry_run }}" = "true" ] && echo "--dry-run" || echo "")" >> "$GITHUB_OUTPUT"
+
+      - name: 스크립트 실행
+        env:
+          S3_BUCKET_NAME: ${{ steps.params.outputs.bucket }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+        run: |
+          set -euo pipefail
+          echo "::group::실행 파라미터"
+          echo "bucket: ${S3_BUCKET_NAME}"
+          echo "region: ${AWS_REGION}"
+          echo "threshold_kb: ${{ inputs.threshold_kb }}"
+          echo "dry_run: ${{ inputs.dry_run }}"
+          echo "::endgroup::"
+
+          node scripts/resize-existing-uploads.mjs \
+            ${{ steps.params.outputs.dry_run_flag }} \
+            --threshold-kb=${{ inputs.threshold_kb }} \
+            | tee migration-output.log
+
+      - name: CloudFront 캐시 무효화
+        # 같은 키로 덮어썼기 때문에 엣지 캐시에 옛 (큰) 객체가 남아 있을 수 있음.
+        # 입력값으로 제어 — 실수로 dry-run 결과만 보고 무효화 비용 발생하는 일 방지.
+        if: ${{ inputs.invalidate_cloudfront == true && inputs.dry_run == false }}
+        env:
+          DIST_ID: ${{ inputs.cloudfront_distribution_id != '' && inputs.cloudfront_distribution_id || vars.CLOUDFRONT_DISTRIBUTION_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DIST_ID:-}" ]; then
+            echo "::error::CLOUDFRONT_DISTRIBUTION_ID가 비어 있습니다. inputs.cloudfront_distribution_id 또는 vars.CLOUDFRONT_DISTRIBUTION_ID 설정 필요."
+            exit 1
+          fi
+          INVAL_ID=$(aws cloudfront create-invalidation \
+            --distribution-id "${DIST_ID}" \
+            --paths "/uploads/*" \
+            --query "Invalidation.Id" \
+            --output text)
+          echo "invalidation_id=${INVAL_ID}"
+          echo "INVAL_ID=${INVAL_ID}" >> "$GITHUB_ENV"
+
+      - name: 결과 요약
+        if: always()
+        run: |
+          {
+            echo "## S3 업로드 이미지 리사이즈 마이그레이션 결과"
+            echo ""
+            echo "- Bucket: \`${{ steps.params.outputs.bucket }}\`"
+            echo "- Region: \`${AWS_REGION}\`"
+            echo "- Threshold: \`${{ inputs.threshold_kb }}KB\`"
+            echo "- Dry-run: \`${{ inputs.dry_run }}\`"
+            echo "- Invalidate CloudFront: \`${{ inputs.invalidate_cloudfront }}\`"
+            if [ -n "${INVAL_ID:-}" ]; then
+              echo "- Invalidation ID: \`${INVAL_ID}\`"
+            fi
+            echo ""
+            echo "### 출력 (마지막 50줄)"
+            echo '```'
+            if [ -f migration-output.log ]; then
+              tail -50 migration-output.log
+            else
+              echo "(no output)"
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 출력 로그 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-output
+          path: migration-output.log
+          retention-days: 14
