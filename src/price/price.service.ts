@@ -22,6 +22,7 @@ import { ProductPriceCardDto } from './dto/product-price-card.dto';
 import { normalizeImageUrl } from '../common/utils/image-url.util';
 import { PointService } from '../point/point.service';
 import { RecentPriceQueryDto } from './dto/recent-price-query.dto';
+import { BadgeRegistryService } from '../badge/services/badge-registry.service';
 
 @Injectable()
 export class PriceService {
@@ -47,6 +48,7 @@ export class PriceService {
     private readonly notificationService: NotificationService,
     private readonly pointService: PointService,
     private readonly dataSource: DataSource,
+    private readonly badgeRegistry: BadgeRegistryService,
   ) {}
 
   async create(
@@ -350,6 +352,9 @@ export class PriceService {
           ? {
               nickname: p.user.nickname,
               profileImageUrl: p.user.profileImageUrl ?? null,
+              representativeBadge: this.badgeRegistry.resolveRepresentative(
+                p.user.representativeBadgeId,
+              ),
             }
           : null,
         priceTag: {

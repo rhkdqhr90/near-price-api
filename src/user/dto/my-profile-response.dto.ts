@@ -1,9 +1,5 @@
 import { User } from '../entities/user.entity';
-
-export interface RepresentativeBadgeView {
-  type: string;
-  name: string;
-}
+import { RepresentativeBadgeDto } from '../../badge/dto/representative-badge.dto';
 
 // 본인 프로필 DTO: GET /user/me 전용 — email, profileImageUrl 포함
 export class MyProfileResponseDto {
@@ -16,13 +12,13 @@ export class MyProfileResponseDto {
   trustScore: number;
   notifPriceChange: boolean;
   notifPromotion: boolean;
-  representativeBadge: RepresentativeBadgeView | null;
+  representativeBadge: RepresentativeBadgeDto | null;
   createdAt: Date;
   updatedAt: Date;
 
   static from(
     user: User,
-    representativeBadge: RepresentativeBadgeView | null = null,
+    representativeBadge: RepresentativeBadgeDto | null = null,
   ): MyProfileResponseDto {
     const dto = new MyProfileResponseDto();
     dto.id = user.id;

@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { BadgeDefinition } from './entities/badge-definition.entity';
 import { UserBadge } from './entities/user-badge.entity';
 import { BadgeEvaluatorService } from './services/badge-evaluator.service';
+import { BadgeRegistryService } from './services/badge-registry.service';
 import { BadgeService } from './badge.service';
 import { BadgeController } from './badge.controller';
 import { User } from '../user/entities/user.entity';
@@ -22,7 +23,7 @@ import { PointWallet } from '../point/entities/point-wallet.entity';
     ]),
   ],
   controllers: [BadgeController],
-  providers: [BadgeEvaluatorService, BadgeService],
-  exports: [BadgeEvaluatorService],
+  providers: [BadgeRegistryService, BadgeEvaluatorService, BadgeService],
+  exports: [BadgeRegistryService, BadgeEvaluatorService],
 })
 export class BadgeModule {}

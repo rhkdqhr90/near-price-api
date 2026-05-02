@@ -10,10 +10,11 @@ import { DataSource, Repository } from 'typeorm';
 import axios from 'axios';
 import { User, UserRole } from '../user/entities/user.entity';
 import { UserOauth, OAuthProvider } from '../user/entities/user-oauth.entity';
-import { AuthResponseDto } from './dto/auth-response.dto';
+import { AuthResponseDto, AuthUserDto } from './dto/auth-response.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RedisService } from '../redis/redis.service';
+import { BadgeRegistryService } from '../badge/services/badge-registry.service';
 
 const REFRESH_TOKEN_PREFIX = 'rt:';
 const REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60; // 7일
@@ -62,6 +63,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
+    private readonly badgeRegistry: BadgeRegistryService,
   ) {}
 
   async kakaoLogin(kakaoAccessToken: string): Promise<AuthResponseDto> {
@@ -256,16 +258,22 @@ export class AuthService {
       REFRESH_TOKEN_TTL_SECONDS,
     );
 
+    const representativeBadge = this.badgeRegistry.resolveRepresentative(
+      user.representativeBadgeId,
+    );
+
+    const userDto = new AuthUserDto();
+    userDto.id = user.id;
+    userDto.email = user.email;
+    userDto.nickname = user.nickname;
+    userDto.trustScore = user.trustScore;
+    userDto.profileImageUrl = user.profileImageUrl ?? null;
+    userDto.representativeBadge = representativeBadge;
+
     const dto = new AuthResponseDto();
     dto.accessToken = accessToken;
     dto.refreshToken = refreshToken;
-    dto.user = {
-      id: user.id,
-      email: user.email,
-      nickname: user.nickname,
-      trustScore: user.trustScore,
-      profileImageUrl: user.profileImageUrl ?? null,
-    };
+    dto.user = userDto;
     return dto;
   }
 }

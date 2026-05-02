@@ -10,6 +10,7 @@ import { Wishlist } from '../wishlist/entities/wishlist.entity';
 import { PriceReactionModule } from '../price-reaction/price-reaction.module';
 import { NotificationModule } from '../notification/notification.module';
 import { PointModule } from '../point/point.module';
+import { BadgeModule } from '../badge/badge.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { PointModule } from '../point/point.module';
     PriceReactionModule,
     NotificationModule,
     PointModule,
+    BadgeModule,
   ],
   controllers: [PriceController],
   providers: [PriceService],

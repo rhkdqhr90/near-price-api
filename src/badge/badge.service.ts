@@ -8,11 +8,9 @@ import { Repository } from 'typeorm';
 import { UserTrustScore } from '../trust-score/entities/user-trust-score.entity';
 import { User } from '../user/entities/user.entity';
 import { BadgeEvaluatorService } from './services/badge-evaluator.service';
-
-export interface RepresentativeBadgeView {
-  type: string;
-  name: string;
-}
+import { BadgeRegistryService } from './services/badge-registry.service';
+import { RepresentativeBadgeDto } from './dto/representative-badge.dto';
+import { UserTrustScoreResponseDto } from './dto/user-trust-score-response.dto';
 
 @Injectable()
 export class BadgeService {
@@ -21,10 +19,11 @@ export class BadgeService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(UserTrustScore)
     private readonly trustScoreRepository: Repository<UserTrustScore>,
-    private readonly badgeEvaluatorService: BadgeEvaluatorService,
+    private readonly badgeEvaluator: BadgeEvaluatorService,
+    private readonly badgeRegistry: BadgeRegistryService,
   ) {}
 
-  async getUserTrustScore(userId: string) {
+  async getUserTrustScore(userId: string): Promise<UserTrustScoreResponseDto> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('사용자를 찾을 수 없습니다');
@@ -34,76 +33,46 @@ export class BadgeService {
       where: { user: { id: userId } },
     });
 
-    return {
-      userId,
-      trustScore: trustScore?.trustScore ?? user.trustScore ?? 0,
-      registrationScore: trustScore?.registrationScore ?? 50,
-      verificationScore: trustScore?.verificationScore ?? 50,
-      consistencyBonus: trustScore?.consistencyBonus ?? 0,
-      totalRegistrations: trustScore?.totalRegistrations ?? 0,
-      totalVerifications: trustScore?.totalVerifications ?? 0,
-      calculatedAt: trustScore?.calculatedAt ?? new Date(),
-    };
+    return UserTrustScoreResponseDto.from(user, trustScore);
   }
 
   /**
    * 사용자의 대표 뱃지를 설정하거나 해제한다.
-   *  - type=null  → 해제
-   *  - 보유하지 않은 뱃지 type → 400
-   *  - 알 수 없는 뱃지 type → 400
+   *
+   * - `type === null` → 해제
+   * - 알 수 없는 BadgeDefinition.id → 400
+   * - 보유하지 않은 뱃지 → 400 (evaluator로 실시간 재평가)
    */
   async setRepresentativeBadge(
     userId: string,
     type: string | null,
-  ): Promise<RepresentativeBadgeView | null> {
+  ): Promise<RepresentativeBadgeDto | null> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('사용자를 찾을 수 없습니다');
     }
 
     if (type === null) {
-      user.representativeBadgeId = null;
-      await this.userRepository.save(user);
+      if (user.representativeBadgeId !== null) {
+        user.representativeBadgeId = null;
+        await this.userRepository.save(user);
+      }
       return null;
     }
 
-    const def = this.badgeEvaluatorService.getBadgeDefinition(type);
+    const def = this.badgeRegistry.findById(type);
     if (!def) {
       throw new BadRequestException('알 수 없는 뱃지입니다');
     }
 
-    const earnedIds =
-      await this.badgeEvaluatorService.getEarnedBadgeIds(userId);
-    if (!earnedIds.includes(type)) {
+    const earnedIds = await this.badgeEvaluator.getEarnedBadgeIds(userId);
+    if (!earnedIds.has(type)) {
       throw new BadRequestException('보유하지 않은 뱃지입니다');
     }
 
     user.representativeBadgeId = type;
     await this.userRepository.save(user);
 
-    return { type: def.id, name: def.name };
-  }
-
-  /**
-   * 사용자의 현재 대표 뱃지를 조회한다.
-   *  - 미설정 또는 알 수 없는 type → null
-   *  - 보유 상태 검증은 응답 시점에 보수적으로 한 번 더 체크 (뱃지 시스템 변경/박탈 대비)
-   */
-  async getRepresentativeBadge(
-    userId: string,
-  ): Promise<RepresentativeBadgeView | null> {
-    const user = await this.userRepository.findOne({ where: { id: userId } });
-    if (!user || !user.representativeBadgeId) {
-      return null;
-    }
-
-    const def = this.badgeEvaluatorService.getBadgeDefinition(
-      user.representativeBadgeId,
-    );
-    if (!def) {
-      return null;
-    }
-
-    return { type: def.id, name: def.name };
+    return RepresentativeBadgeDto.fromDefinition(def);
   }
 }

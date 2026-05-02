@@ -3,6 +3,7 @@ import type {
   CardDiscountType,
   PriceTagType,
 } from '../entities/price.entity';
+import { RepresentativeBadgeDto } from '../../badge/dto/representative-badge.dto';
 
 /**
  * 가격표(PriceTag) 구조화 DTO.
@@ -63,7 +64,11 @@ export class ProductPriceCardDto {
   imageUrl: string | null;
   quantity: string | null;
   createdAt: Date;
-  registrant: { nickname: string; profileImageUrl: string | null } | null;
+  registrant: {
+    nickname: string;
+    profileImageUrl: string | null;
+    representativeBadge: RepresentativeBadgeDto | null;
+  } | null;
 
   // ── 신규 구조화 필드 ──
   priceTag: PriceTagDto;

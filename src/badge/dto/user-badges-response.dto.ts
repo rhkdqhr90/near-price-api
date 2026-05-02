@@ -20,4 +20,18 @@ export class BadgeProgressDto {
 export class UserBadgesResponseDto {
   earned: BadgeItemDto[];
   progress: BadgeProgressDto[];
+
+  static from(
+    earned: BadgeItemDto[],
+    progress: BadgeProgressDto[],
+  ): UserBadgesResponseDto {
+    const dto = new UserBadgesResponseDto();
+    dto.earned = earned;
+    dto.progress = progress;
+    return dto;
+  }
+
+  static empty(): UserBadgesResponseDto {
+    return UserBadgesResponseDto.from([], []);
+  }
 }

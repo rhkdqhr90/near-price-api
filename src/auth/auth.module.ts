@@ -8,10 +8,12 @@ import { UserOauth } from '../user/entities/user-oauth.entity';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { BadgeModule } from '../badge/badge.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, UserOauth]),
+    BadgeModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
