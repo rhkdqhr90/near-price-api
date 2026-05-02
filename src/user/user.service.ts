@@ -14,6 +14,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { MyProfileResponseDto } from './dto/my-profile-response.dto';
 import type { AuthUser } from '../auth/types/auth-user.type';
+import { BadgeEvaluatorService } from '../badge/services/badge-evaluator.service';
 import { containsBannedWords } from '../common/constants/banned-words';
 import { Price } from '../price/entities/price.entity';
 import { UserOauth } from './entities/user-oauth.entity';
@@ -30,6 +31,7 @@ export class UserService {
     @InjectRepository(UserOauth)
     private readonly userOauthRepository: Repository<UserOauth>,
     private readonly dataSource: DataSource,
+    private readonly badgeEvaluatorService: BadgeEvaluatorService,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserResponseDto> {
@@ -59,7 +61,19 @@ export class UserService {
     if (!user) {
       throw new NotFoundException(`User #${userId} not found`);
     }
-    return MyProfileResponseDto.from(user);
+
+    // 대표 뱃지(자기 자신 응답) — id만 user에 저장되어 있으므로 메타(이름) 보강
+    let representativeBadge: { type: string; name: string } | null = null;
+    if (user.representativeBadgeId) {
+      const def = this.badgeEvaluatorService.getBadgeDefinition(
+        user.representativeBadgeId,
+      );
+      if (def) {
+        representativeBadge = { type: def.id, name: def.name };
+      }
+    }
+
+    return MyProfileResponseDto.from(user, representativeBadge);
   }
 
   async findOne(id: string): Promise<UserResponseDto> {

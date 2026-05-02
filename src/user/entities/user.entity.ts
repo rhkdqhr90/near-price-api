@@ -71,6 +71,15 @@ export class User {
   @Column({ type: 'int', default: 0 })
   trustScore: number;
 
+  /**
+   * 사용자가 BadgeScreen에서 선택한 대표 뱃지 ID.
+   * 작성한 글(가격 카드, 검증, 리뷰 등)의 닉네임 옆에 표시된다.
+   * BadgeDefinition.id (`masil_1` ~ `masil_23`)를 가리킴.
+   * null = 미선택 (어떤 뱃지도 표시 안 함)
+   */
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  representativeBadgeId: string | null;
+
   @OneToMany(() => UserOauth, (oauth) => oauth.user)
   oauths: UserOauth[];
 
