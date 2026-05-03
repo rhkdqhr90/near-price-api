@@ -13,6 +13,8 @@ export class MyProfileResponseDto {
   notifPriceChange: boolean;
   notifPromotion: boolean;
   representativeBadge: RepresentativeBadgeDto | null;
+  /** 마지막 변경 시각. 앱이 1시간 쿨다운 카운트다운에 사용. 미설정이면 null. */
+  representativeBadgeChangedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 
@@ -31,6 +33,7 @@ export class MyProfileResponseDto {
     dto.notifPriceChange = user.notifPriceChange;
     dto.notifPromotion = user.notifPromotion;
     dto.representativeBadge = representativeBadge;
+    dto.representativeBadgeChangedAt = user.representativeBadgeChangedAt;
     dto.createdAt = user.createdAt;
     dto.updatedAt = user.updatedAt;
     return dto;

@@ -42,6 +42,7 @@ export class BadgeService {
    * - `type === null` → 해제
    * - 알 수 없는 BadgeDefinition.id → 400
    * - 보유하지 않은 뱃지 → 400 (evaluator로 실시간 재평가)
+   * - 마지막 변경 후 1시간 미만 → 400 (쿨다운, 같은 값 재설정 시엔 통과)
    */
   async setRepresentativeBadge(
     userId: string,
@@ -52,11 +53,30 @@ export class BadgeService {
       throw new NotFoundException('사용자를 찾을 수 없습니다');
     }
 
-    if (type === null) {
-      if (user.representativeBadgeId !== null) {
-        user.representativeBadgeId = null;
-        await this.userRepository.save(user);
+    // 동일 값 재설정은 no-op — 쿨다운 검사 자체를 건너뛴다 (idempotent)
+    if (user.representativeBadgeId === type) {
+      if (type === null) return null;
+      const def = this.badgeRegistry.findById(type);
+      return def ? RepresentativeBadgeDto.fromDefinition(def) : null;
+    }
+
+    // 1시간 쿨다운 검사
+    const COOLDOWN_MS = 60 * 60 * 1000;
+    if (user.representativeBadgeChangedAt) {
+      const elapsed =
+        Date.now() - new Date(user.representativeBadgeChangedAt).getTime();
+      if (elapsed < COOLDOWN_MS) {
+        const remainMin = Math.ceil((COOLDOWN_MS - elapsed) / 60000);
+        throw new BadRequestException(
+          `대표 뱃지는 1시간에 한 번만 변경할 수 있습니다. (${remainMin}분 후 가능)`,
+        );
       }
+    }
+
+    if (type === null) {
+      user.representativeBadgeId = null;
+      user.representativeBadgeChangedAt = new Date();
+      await this.userRepository.save(user);
       return null;
     }
 
@@ -71,6 +91,7 @@ export class BadgeService {
     }
 
     user.representativeBadgeId = type;
+    user.representativeBadgeChangedAt = new Date();
     await this.userRepository.save(user);
 
     return RepresentativeBadgeDto.fromDefinition(def);

@@ -80,6 +80,14 @@ export class User {
   @Column({ type: 'varchar', length: 50, nullable: true })
   representativeBadgeId: string | null;
 
+  /**
+   * 대표 뱃지를 마지막으로 변경한 시각.
+   * 1시간 쿨다운 정책 — 사용자가 동일 분 내 토글하더라도 잦은 DB write/UX 혼란 방지.
+   * 닉네임의 3일 제한과 동일한 "사용자 의도 명시" 정책.
+   */
+  @Column({ type: 'timestamp', nullable: true })
+  representativeBadgeChangedAt: Date | null;
+
   @OneToMany(() => UserOauth, (oauth) => oauth.user)
   oauths: UserOauth[];
 

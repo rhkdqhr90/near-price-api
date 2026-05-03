@@ -53,7 +53,8 @@ export class BadgeController {
    */
   @Patch('me/representative-badge')
   @UseGuards(JwtAuthGuard)
-  @Throttle({ write: { limit: 20, ttl: 60_000 } })
+  // HTTP 레벨 abuse 방어 — 도메인 쿨다운(1시간) 메시지가 즉시 떨어지므로 한도는 여유롭게.
+  @Throttle({ write: { limit: 60, ttl: 60_000 } })
   async setRepresentativeBadge(
     @Body() dto: SetRepresentativeBadgeDto,
     @CurrentUser() currentUser: AuthUser,
