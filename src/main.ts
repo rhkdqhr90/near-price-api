@@ -121,6 +121,13 @@ async function bootstrap() {
       );
     } else {
       app.use((req: Request, res: Response, next: NextFunction) => {
+        // /health 는 컨테이너 내부 Docker healthcheck 및 nginx 모니터링 전용 —
+        // X-Forwarded-Proto / Host 검증을 우회시켜 internal localhost 호출도 통과시킨다.
+        // (민감 데이터 없음 + 차단 시 docker가 unhealthy 마킹하여 운영자 혼란 야기)
+        if (req.path === '/health') {
+          next();
+          return;
+        }
         if (req.headers['x-forwarded-proto'] !== 'https') {
           const reqHost = req.headers.host ?? '';
           if (!allowedHosts.has(reqHost)) {
