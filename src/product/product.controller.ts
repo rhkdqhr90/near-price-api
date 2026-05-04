@@ -38,14 +38,14 @@ export class ProductController {
 
   // GET /product/popular-tags — 인기 검색 태그 (price 등록 빈도 기반)
   @Get('popular-tags')
-  @Throttle({ search: { limit: 30, ttl: 60000 } })
+  @Throttle({ search: { limit: 100, ttl: 60000 } })
   async popularTags(): Promise<string[]> {
     return await this.productService.findPopularTags();
   }
 
   // GET /product/search?q=keyword — (반드시 :id 라우터보다 위에 위치)
   @Get('search')
-  @Throttle({ search: { limit: 30, ttl: 60000 } })
+  @Throttle({ search: { limit: 100, ttl: 60000 } })
   async search(
     @Query() query: SearchProductQueryDto,
   ): Promise<SearchProductResponseDto[]> {

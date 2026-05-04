@@ -42,7 +42,7 @@ export class StoreController {
   }
 
   @Get('search')
-  @Throttle({ search: { limit: 30, ttl: 60000 } })
+  @Throttle({ search: { limit: 100, ttl: 60000 } })
   async searchByName(@Query('name') name: string) {
     if (!name || name.trim().length < 1) return [];
     if (name.length > 100)

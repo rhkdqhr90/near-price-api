@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import * as Sentry from '@sentry/nestjs';
 import { TrustScoreService } from './trust-score.service';
 
 @Injectable()
@@ -11,6 +12,7 @@ export class TrustScoreScheduler {
   /**
    * 매일 새벽 3시 신뢰도 일괄 재계산
    * 순서: 가격 신뢰도 → 사용자 신뢰도 (가격 점수를 사용자 점수 계산에 활용)
+   * 실패 시: Sentry로 보고하여 즉시 알림 (24시간 내 재실행 기회 없음)
    */
   @Cron('0 3 * * *')
   async recalculateAll(): Promise<void> {
@@ -20,6 +22,10 @@ export class TrustScoreScheduler {
       this.logger.log('Trust Score 일일 재계산 완료');
     } catch (err) {
       this.logger.error('Trust Score 재계산 중 오류 발생', err);
+      Sentry.captureException(err, {
+        tags: { scheduler: 'trust-score', job: 'recalculateAll' },
+        level: 'error',
+      });
     }
   }
 }

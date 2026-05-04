@@ -28,7 +28,7 @@ export class NaverController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Throttle({ search: { limit: 60, ttl: 60000 } })
+  @Throttle({ search: { limit: 100, ttl: 60000 } })
   @Get('search')
   async search(
     @Query() query: NaverSearchQueryDto,

@@ -39,11 +39,14 @@ export const createThrottlerConfig = (
       ttl: minutes(1),
       limit: 10,
     },
-    // 검색: 1분에 30요청
+    // 검색: 1분에 100요청
+    // 한 번의 매장 검색이 (DB 검색 + 네이버 키워드 검색 × region hint) 등으로
+    // 백엔드에 2~3회 호출되며, IP 기반 throttle은 NAT 환경의 다수 사용자에 영향이 크다.
+    // 외부 API 비용을 감안해 무제한이 아니되 일반 사용자가 막히지 않을 여유 폭으로 설정.
     {
       name: 'search',
       ttl: minutes(1),
-      limit: 30,
+      limit: 100,
     },
   ];
 };
