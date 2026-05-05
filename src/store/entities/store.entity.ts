@@ -20,8 +20,17 @@ export enum StoreType {
 // 커스텀 카테고리도 지원하는 타입
 export type StoreTypeValue = StoreType | string;
 
+// 매장 데이터 출처. 검색 우선순위/가시성/정합성 정책에 사용된다.
+//   USER         사용자가 직접 등록한 매장 (가격이 연결되어 있을 가능성 높음)
+//   PUBLIC_DATA  소상공인 상가(상권) 정보 ingest로 채워진 매장 (read-only 마스터)
+export enum StoreSource {
+  USER = 'USER',
+  PUBLIC_DATA = 'PUBLIC_DATA',
+}
+
 @Entity('stores')
 @Index(['latitude', 'longitude'])
+@Index(['source'])
 export class Store {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -62,6 +71,10 @@ export class Store {
   // 외부 API 매장 고유 ID (선택, 커스텀 매장은 null)
   @Column({ type: 'varchar', unique: true, nullable: true })
   externalPlaceId: string | null;
+
+  // 데이터 출처. 마이그레이션으로 기존 행은 모두 'USER'.
+  @Column({ type: 'varchar', length: 20, default: StoreSource.USER })
+  source: StoreSource;
 
   @OneToMany(() => Price, (price) => price.store)
   prices: Price[];

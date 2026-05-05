@@ -15,6 +15,7 @@ import {
   NearbyStoreQueryDto,
   NearbyStoreResponseDto,
 } from './dto/nearby-store.dto';
+import { SearchNearbyStoreQueryDto } from './dto/search-nearby-store.dto';
 import { CreateStoreReviewDto } from './dto/create-store-review.dto';
 import { StoreReviewResponseDto } from './dto/store-review-response.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -132,6 +133,88 @@ export class StoreService {
       .getRawAndEntities();
 
     // Create a map for O(1) lookup instead of O(n) find
+    const storeMap = new Map(stores.entities.map((s) => [s.id, s]));
+
+    return stores.raw
+      .map((row: { distance: string; store_id: string }) => {
+        const store = storeMap.get(row.store_id);
+        if (!store) return null;
+        const dto = new NearbyStoreResponseDto();
+        dto.id = store.id;
+        dto.name = store.name;
+        dto.type = store.type;
+        dto.latitude = store.latitude;
+        dto.longitude = store.longitude;
+        dto.address = store.address;
+        dto.distance = Math.round(parseFloat(row.distance));
+        return dto;
+      })
+      .filter((dto): dto is NearbyStoreResponseDto => dto !== null);
+  }
+
+  // 좌표 + 키워드 결합 검색.
+  // - 사용자 위치를 중심으로 radius 안쪽에서 name ILIKE 매칭되는 매장을 거리순으로 반환.
+  // - 외부 검색 API(Naver Local) 의 5건 한계/위치 미지원 문제를 자체 DB 로 해결한다.
+  // - keyword 가 비어 있으면 단순 nearby 와 동일하게 동작한다.
+  async searchNearby(
+    query: SearchNearbyStoreQueryDto,
+  ): Promise<NearbyStoreResponseDto[]> {
+    const { lat, lng, radius, limit } = query;
+    const keyword = query.keyword?.trim() ?? '';
+
+    // Bounding box 사전 필터링: 인덱스 범위 스캔으로 후보군 축소
+    const latDelta = radius / 111_000;
+    const lngDelta = radius / (111_000 * Math.cos((lat * Math.PI) / 180));
+
+    const qb = this.storeRepository
+      .createQueryBuilder('store')
+      .select([
+        'store.id',
+        'store.name',
+        'store.type',
+        'store.latitude',
+        'store.longitude',
+        'store.address',
+      ])
+      .addSelect(
+        `(6371000 * acos(
+          cos(radians(:lat)) * cos(radians(store.latitude)) *
+          cos(radians(store.longitude) - radians(:lng)) +
+          sin(radians(:lat)) * sin(radians(store.latitude))
+        ))`,
+        'distance',
+      )
+      .where('store.latitude BETWEEN :minLat AND :maxLat', {
+        minLat: lat - latDelta,
+        maxLat: lat + latDelta,
+      })
+      .andWhere('store.longitude BETWEEN :minLng AND :maxLng', {
+        minLng: lng - lngDelta,
+        maxLng: lng + lngDelta,
+      })
+      .andWhere(
+        `(6371000 * acos(
+          cos(radians(:lat)) * cos(radians(store.latitude)) *
+          cos(radians(store.longitude) - radians(:lng)) +
+          sin(radians(:lat)) * sin(radians(store.latitude))
+        )) <= :radius`,
+      )
+      .setParameters({ lat, lng, radius });
+
+    if (keyword.length > 0) {
+      // LIKE 와일드카드 이스케이프 — %, _, \ 를 리터럴로 처리 (SQL Injection 방지)
+      const escaped = keyword.replace(/[\\%_]/g, '\\$&');
+      qb.andWhere('store.name ILIKE :name ESCAPE :escape', {
+        name: `%${escaped}%`,
+        escape: '\\',
+      });
+    }
+
+    const stores = await qb
+      .orderBy('distance', 'ASC')
+      .limit(limit)
+      .getRawAndEntities();
+
     const storeMap = new Map(stores.entities.map((s) => [s.id, s]));
 
     return stores.raw

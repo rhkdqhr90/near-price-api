@@ -20,6 +20,7 @@ import { StoreService } from './store.service';
 import { CreateStoreDto } from './dto/create-store.dto';
 import { UpdateStoreDto } from './dto/update-store.dto';
 import { NearbyStoreQueryDto } from './dto/nearby-store.dto';
+import { SearchNearbyStoreQueryDto } from './dto/search-nearby-store.dto';
 import { CreateStoreReviewDto } from './dto/create-store-review.dto';
 import { StoreReviewResponseDto } from './dto/store-review-response.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -53,6 +54,14 @@ export class StoreController {
   @Get('nearby')
   async findNearby(@Query() query: NearbyStoreQueryDto) {
     return await this.storeService.findNearby(query);
+  }
+
+  // 좌표 + 키워드 결합 검색. 자체 DB 만으로 거리순 결과를 반환한다.
+  // (네이버 Local Search API의 5건 + 위치 미지원 한계를 우회하기 위한 자체 검색.)
+  @Get('searchNearby')
+  @Throttle({ search: { limit: 100, ttl: 60000 } })
+  async searchNearby(@Query() query: SearchNearbyStoreQueryDto) {
+    return await this.storeService.searchNearby(query);
   }
 
   @Get('by-external/:externalPlaceId')
