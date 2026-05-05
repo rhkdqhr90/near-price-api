@@ -29,7 +29,11 @@ const PROGRESS_EVERY = 10_000;
 const pickFirst = (row: CsvRow, ...keys: string[]): string => {
   for (const key of keys) {
     const value = row[key];
-    if (value !== undefined && value !== null && String(value).trim().length > 0) {
+    if (
+      value !== undefined &&
+      value !== null &&
+      String(value).trim().length > 0
+    ) {
       return String(value).trim();
     }
   }
@@ -44,7 +48,8 @@ const mapCategoryToStoreType = (category: string): string | null => {
   if (c.includes('편의점')) return 'convenience';
   if (c.includes('대형할인점') || c.includes('대형마트')) return 'large_mart';
   if (c.includes('슈퍼') || c.includes('수퍼')) return 'supermarket';
-  if (c.includes('전통시장') || c.includes('재래시장')) return 'traditional_market';
+  if (c.includes('전통시장') || c.includes('재래시장'))
+    return 'traditional_market';
   if (
     c.includes('음/식료품') ||
     c.includes('음식료품') ||
@@ -53,7 +58,12 @@ const mapCategoryToStoreType = (category: string): string | null => {
   ) {
     return 'mart';
   }
-  if (c.includes('정육') || c.includes('청과') || c.includes('야채') || c.includes('과일')) {
+  if (
+    c.includes('정육') ||
+    c.includes('청과') ||
+    c.includes('야채') ||
+    c.includes('과일')
+  ) {
     return 'mart';
   }
   if (c.includes('수산') || c.includes('생선')) return 'mart';
@@ -78,9 +88,7 @@ interface IngestRow {
   source: StoreSource;
 }
 
-const flushBuffer = async (
-  buffer: IngestRow[],
-): Promise<void> => {
+const flushBuffer = async (buffer: IngestRow[]): Promise<void> => {
   if (buffer.length === 0) return;
   await AppDataSource.createQueryBuilder()
     .insert()
@@ -245,7 +253,9 @@ async function ingest(target: string): Promise<void> {
 
 const target = process.argv[2];
 if (!target) {
-  console.error('Usage: ts-node scripts/ingest-public-stores.ts <csv-file-or-dir>');
+  console.error(
+    'Usage: ts-node scripts/ingest-public-stores.ts <csv-file-or-dir>',
+  );
   process.exit(1);
 }
 
