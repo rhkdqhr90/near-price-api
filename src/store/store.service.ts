@@ -4,7 +4,45 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { Brackets, QueryFailedError, Repository } from 'typeorm';
+
+// 주요 체인 브랜드의 한/영 표기 양방향 매핑.
+// 공공데이터 등록자가 "지에스25" 또는 "GS25" 어느 쪽으로든 입력해도
+// 사용자가 "GS" / "지에스" 어느 쪽으로 검색하든 모두 매칭되게 한다.
+// key 와 values 모두 lowercase 로 둔다 (입력 키워드도 lowercase 화 비교).
+const BRAND_ALIASES: Array<[string, string[]]> = [
+  ['gs', ['지에스']],
+  ['지에스', ['gs']],
+  ['cu', ['씨유']],
+  ['씨유', ['cu']],
+  ['세븐일레븐', ['코리아세븐']],
+  ['코리아세븐', ['세븐일레븐']],
+  ['emart', ['이마트']],
+  ['이마트', ['emart']],
+  ['ministop', ['미니스톱']],
+  ['미니스톱', ['ministop']],
+  ['homeplus', ['홈플러스']],
+  ['홈플러스', ['homeplus']],
+  ['lottemart', ['롯데마트']],
+  ['롯데마트', ['lottemart']],
+  ['더프레시', ['thefresh']],
+  ['thefresh', ['더프레시']],
+];
+
+const expandKeywordAliases = (keyword: string): string[] => {
+  const lower = keyword.toLowerCase();
+  const variants = new Set<string>([keyword]);
+  for (const [match, replacements] of BRAND_ALIASES) {
+    if (!lower.includes(match)) continue;
+    for (const replacement of replacements) {
+      // 원문 keyword 의 대소문자/공백 보존을 위해 lower 기반으로 치환만 수행.
+      // ILIKE 는 case-insensitive 라 결과 동일.
+      const replaced = lower.split(match).join(replacement);
+      variants.add(replaced);
+    }
+  }
+  return Array.from(variants);
+};
 import { Store } from './entities/store.entity';
 import { StoreReview } from './entities/store-review.entity';
 import { User } from '../user/entities/user.entity';
@@ -202,12 +240,31 @@ export class StoreService {
       .setParameters({ lat, lng, radius });
 
     if (keyword.length > 0) {
-      // LIKE 와일드카드 이스케이프 — %, _, \ 를 리터럴로 처리 (SQL Injection 방지)
-      const escaped = keyword.replace(/[\\%_]/g, '\\$&');
-      qb.andWhere('store.name ILIKE :name ESCAPE :escape', {
-        name: `%${escaped}%`,
-        escape: '\\',
-      });
+      // 사용자가 "GS"로 검색해도 공공데이터의 "지에스" 표기 매장을 매칭시키기 위해
+      // 주요 체인의 한/영 표기를 양방향으로 확장한 ILIKE OR 조건을 만든다.
+      //  - 입력 "Gs" → ILIKE '%Gs%' OR '%지에스%'
+      //  - 입력 "씨유" → ILIKE '%씨유%' OR '%cu%'
+      const variants = expandKeywordAliases(keyword);
+      const escapedVariants = variants.map((v) => v.replace(/[\\%_]/g, '\\$&'));
+
+      qb.andWhere(
+        new Brackets((qb2) => {
+          escapedVariants.forEach((esc, i) => {
+            const param = `name${i}`;
+            const pattern = `%${esc}%`;
+            if (i === 0) {
+              qb2.where(`store.name ILIKE :${param} ESCAPE :escape`, {
+                [param]: pattern,
+                escape: '\\',
+              });
+            } else {
+              qb2.orWhere(`store.name ILIKE :${param} ESCAPE :escape`, {
+                [param]: pattern,
+              });
+            }
+          });
+        }),
+      );
     }
 
     const stores = await qb
